@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Crudge Report</title>
+  <style>
+    body {
+      background-color: #ffffff;
+      color: #000000;
+      font-family: "Times New Roman", Times, serif;
+      margin: 0;
+      padding: 20px 40px;
+      line-height: 1.3;
+    }
+    h1 {
+      text-align: center;
+      font-size: 72px;
+      font-weight: bold;
+      margin: 10px 0 30px;
+      letter-spacing: -2px;
+    }
+    .subtitle {
+      text-align: center;
+      font-size: 28px;
+      margin-bottom: 40px;
+      font-weight: bold;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      column-count: 3;
+      column-gap: 60px;
+      column-rule: 1px solid #aaa;
+    }
+    .headline {
+      font-size: 22px;
+      font-weight: bold;
+      margin: 0 0 14px 0;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .headline a {
+      color: #000000;
+      text-decoration: none;
+    }
+    .headline a:hover {
+      text-decoration: underline;
+    }
+    .small {
+      font-size: 18px;
+    }
+    .very-small {
+      font-size: 15px;
+    }
+    .source {
+      color: #555;
+      font-size: 14px;
+      margin-top: -4px;
+      display: block;
+    }
+    .updated {
+      text-align: center;
+      font-size: 14px;
+      color: #777;
+      margin: 40px 0;
+    }
+    @media (max-width: 900px) {
+      .container { column-count: 2; column-gap: 40px; }
+    }
+    @media (max-width: 600px) {
+      .container { column-count: 1; }
+      h1 { font-size: 52px; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Crudge Report</h1>
+<div class="subtitle">Crudge ReportE — LATEST FROM THE WIRE</div>
+
+<div class="container" id="headlines">
+  <!-- Headlines will be inserted here by JavaScript -->
+  <p style="text-align:center; font-size:18px;">Loading latest Crudge Report political news...</p>
+</div>
+
+<div class="updated" id="last-update">Last update: —</div>
+
+<script>
+  const apiKey = 'apihere'; // ← Replace with your NewsAPI key!
+  const url = `https://newsapi.org/v2/everything?` +
+              `q=(geopolitics OR ukraine OR taiwan OR israel OR iran OR china OR russia OR "middle east" OR nato OR "north korea")&` +
+              `language=en&` +
+              `sortBy=publishedAt&` +
+              `pageSize=60&` +
+              `apiKey=${apiKey}`;
+
+  fetch(url)
+    .then(response => {
+      if (!response.ok) throw new Error('API error — check your key or quota');
+      return response.json();
+    })
+    .then(data => {
+      const container = document.getElementById('headlines');
+      container.innerHTML = ''; // clear loader
+
+      if (data.status !== 'ok' || !data.articles?.length) {
+        container.innerHTML = '<p style="text-align:center;color:red">No articles found or API issue :(</p>';
+        return;
+      }
+
+      const now = new Date().toLocaleString();
+      document.getElementById('last-update').textContent = `Last update: ${now}`;
+
+      // Different sizes for visual hierarchy (Drudge style)
+      data.articles.slice(0, 60).forEach((article, i) => {
+        let sizeClass = 'headline';
+        if (i < 5) sizeClass += '';                    // biggest
+        else if (i < 15) sizeClass += ' small';
+        else sizeClass += ' very-small';
+
+        const title = article.title || 'No title';
+        const link = article.url || '#';
+        const source = article.source?.name || 'Unknown';
+
+        const div = document.createElement('div');
+        div.className = sizeClass;
+        div.innerHTML = `
+          <a href="${link}" target="_blank" rel="noopener noreferrer">${title}</a>
+          <span class="source">[${source}]</span>
+        `;
+        container.appendChild(div);
+      });
+    })
+    .catch(err => {
+      document.getElementById('headlines').innerHTML = 
+        `<p style="text-align:center;color:red">Error: ${err.message}<br>Check console (F12) or your API key/quota.</p>`;
+      console.error(err);
+    });
+</script>
+
+</body>
+</html>
