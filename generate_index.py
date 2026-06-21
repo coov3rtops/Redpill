@@ -25,7 +25,7 @@ def extract_first_image_base64(html_file):
         with open(html_file, 'r', encoding='utf-8') as f:
             soup = BeautifulSoup(f, 'html.parser')
         
-        # Strategy 1: Any <img> with data:image base64
+        # Strategy 1: <img> with data:image base64
         for img in soup.find_all('img'):
             src = img.get('src', '')
             if src.startswith('data:image'):
@@ -35,7 +35,7 @@ def extract_first_image_base64(html_file):
                 except:
                     continue
         
-        # Strategy 2: Look for base64 anywhere in the file
+        # Strategy 2: Search anywhere in the HTML for base64 images
         base64_pattern = re.compile(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)')
         match = base64_pattern.search(str(soup))
         if match:
@@ -128,91 +128,76 @@ def main():
             --preview-bg: #2c2c2e;
         }}
 
-        body {{ margin:0; font-family:'SF Pro Display', -apple-system, sans-serif; background:var(--bg); color:var(--text); display:flex; height:100vh; overflow:hidden; }}
-        .sidebar {{ width:380px; background:var(--sidebar-bg); border-right:1px solid var(--border); overflow-y:auto; padding:12px 0; box-shadow:2px 0 8px rgba(0,0,0,0.1); }}
-        .header {{ padding:0 20px 8px; font-size:13px; font-weight:500; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; display:flex; justify-content:space-between; align-items:center; }}
-        .theme-toggle {{ background:none; border:none; font-size:20px; cursor:pointer; padding:4px 8px; border-radius:6px; color:var(--text-secondary); }}
-        .theme-toggle:hover {{ background:var(--hover); }}
+        body {{ 
+            margin:0; 
+            font-family:'SF Pro Display', -apple-system, sans-serif; 
+            background:var(--bg); 
+            color:var(--text); 
+            display:flex; 
+            height:100vh; 
+            overflow:hidden; 
+        }}
+        
+        .sidebar {{ 
+            width:380px; 
+            background:var(--sidebar-bg); 
+            border-right:1px solid var(--border); 
+            overflow-y:auto; 
+            padding:12px 0; 
+            box-shadow:2px 0 8px rgba(0,0,0,0.1); 
+        }}
+        .header {{ 
+            padding:0 20px 8px; 
+            font-size:13px; 
+            font-weight:500; 
+            color:var(--text-secondary); 
+            text-transform:uppercase; 
+            letter-spacing:0.5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }}
+        .theme-toggle {{ 
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            color: var(--text-secondary);
+        }}
+        .theme-toggle:hover {{ background: var(--hover); }}
+
         ul {{ list-style:none; margin:0; padding:0; }}
         li {{ padding:8px 20px; display:flex; align-items:center; gap:12px; cursor:pointer; transition:background 0.2s; }}
         li:hover {{ background:var(--hover); }}
-        li a {{ text-decoration:none; color:var(--text); flex:1; display:flex; align-items:center; gap:12px; font-size:15px; }}
+        li a {{ 
+            text-decoration:none; 
+            color:var(--text) !important; 
+            flex:1; 
+            display:flex; 
+            align-items:center; 
+            gap:12px; 
+            font-size:15px; 
+        }}
         .thumb {{ width:52px; height:52px; object-fit:cover; border-radius:8px; background:#f0f0f0; flex-shrink:0; }}
         .no-thumb {{ width:52px; height:52px; display:flex; align-items:center; justify-content:center; font-size:28px; background:#f0f0f0; border-radius:8px; flex-shrink:0; }}
-        .title {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }}
-        .date {{ font-size:12px; color:var(--text-secondary); white-space:nowrap; }}
-        .preview-pane {{ flex:1; background:var(--preview-bg); overflow:auto; padding:40px; }}
-        .preview-pane iframe {{ width:100%; height:100%; border:none; }}
-        .version {{ font-size:11px; color:#999; text-align:center; padding:8px; }}
-    </style>
-</head>
-<body>
-    <div class="sidebar">
-        <div class="header">
-            All Notes • {len(notes)} total
-            <button class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">🌙</button>
-        </div>
-        <ul id="notes-list">
-"""
-
-    for note in notes:
-        thumb_html = f'<img class="thumb" src="{note["thumb"]}" alt="">' if note['thumb'] else '<div class="no-thumb">📄</div>'
-        html_content += f"""            <li>
-                <a href="{note['file']}" class="note-link" data-file="{note['file']}">
-                    {thumb_html}
-                    <span class="title">{note['title']}</span>
-                    <span class="date">{note['date']}</span>
-                </a>
-            </li>
-"""
-
-    html_content += f"""        </ul>
-        <div class="version">Updated {version}</div>
-    </div>
-
-    <div class="preview-pane" id="preview">
-        <iframe id="note-frame" src=""></iframe>
-    </div>
-
-    <script>
-        const toggle = document.getElementById('theme-toggle');
-        const body = document.body;
-        const frame = document.getElementById('note-frame');
-
-        if (localStorage.getItem('theme') === 'dark') {{
-            body.setAttribute('data-theme', 'dark');
-            toggle.textContent = '☀️';
+        .title {{ 
+            overflow:hidden; 
+            text-overflow:ellipsis; 
+            white-space:nowrap; 
+            flex:1;
+            color: var(--text) !important;
+        }}
+        .date {{ 
+            font-size:12px; 
+            color:var(--text-secondary) !important; 
+            white-space:nowrap; 
         }}
 
-        toggle.addEventListener('click', () => {{
-            if (body.getAttribute('data-theme') === 'dark') {{
-                body.removeAttribute('data-theme');
-                toggle.textContent = '🌙';
-                localStorage.setItem('theme', 'light');
-            }} else {{
-                body.setAttribute('data-theme', 'dark');
-                toggle.textContent = '☀️';
-                localStorage.setItem('theme', 'dark');
-            }}
-        }});
-
-        document.querySelectorAll('.note-link').forEach(link => {{
-            link.addEventListener('click', function(e) {{
-                e.preventDefault();
-                frame.src = this.getAttribute('data-file');
-            }});
-        }});
-
-        const firstLink = document.querySelector('.note-link');
-        if (firstLink) frame.src = firstLink.getAttribute('data-file');
-    </script>
-</body>
-</html>"""
-
-    with open(root / "index.html", "w", encoding="utf-8") as f:
-        f.write(html_content)
-    
-    print(f"🎉 index.html updated with version {version}")
-
-if __name__ == "__main__":
-    main()
+        .preview-pane {{ 
+            flex:1; 
+            background:var(--preview-bg); 
+            overflow:auto; 
+            padding:40px; 
+            color:
