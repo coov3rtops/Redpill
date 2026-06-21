@@ -35,20 +35,15 @@ def extract_first_image_base64(html_file):
                 except:
                     continue
         
-        # Strategy 2: Look for base64 in any attribute
+        # Strategy 2: Look for base64 anywhere in the file
         base64_pattern = re.compile(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)')
         match = base64_pattern.search(str(soup))
         if match:
             return base64.b64decode(match.group(1))
         
-        # Strategy 3: Any img tag (in case Apple Notes uses relative paths)
-        img = soup.find('img')
-        if img:
-            print(f"   ⚠️  Found <img> but no base64 in: {html_file.name}")
-        
         return None
     except Exception as e:
-        print(f"   ❌ Error extracting image from {html_file.name}: {e}")
+        print(f"   ❌ Error reading {html_file.name}: {e}")
         return None
 
 def save_thumbnail(image_bytes, thumb_path):
@@ -85,10 +80,8 @@ def main():
                 thumb_rel = f"{THUMBNAILS_FOLDER}/{thumb_filename}"
                 thumb_count += 1
                 print(f"   ✅ Thumbnail created: {thumb_filename}")
-            else:
-                print(f"   ❌ Failed to save thumbnail for: {title}")
         else:
-            print(f"   📄 No image found: {title}")
+            print(f"   📄 No image found in: {title}")
 
         mod_time = datetime.fromtimestamp(html_file.stat().st_mtime)
         date_str = mod_time.strftime("%b %d")
@@ -104,7 +97,6 @@ def main():
 
     print(f"\n✅ Found {len(notes)} notes | Created {thumb_count} thumbnails")
 
-    # === Build HTML with Version ===
     version = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     html_content = f"""<!DOCTYPE html>
@@ -200,4 +192,27 @@ def main():
             }} else {{
                 body.setAttribute('data-theme', 'dark');
                 toggle.textContent = '☀️';
-                local
+                localStorage.setItem('theme', 'dark');
+            }}
+        }});
+
+        document.querySelectorAll('.note-link').forEach(link => {{
+            link.addEventListener('click', function(e) {{
+                e.preventDefault();
+                frame.src = this.getAttribute('data-file');
+            }});
+        }});
+
+        const firstLink = document.querySelector('.note-link');
+        if (firstLink) frame.src = firstLink.getAttribute('data-file');
+    </script>
+</body>
+</html>"""
+
+    with open(root / "index.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+    
+    print(f"🎉 index.html updated with version {version}")
+
+if __name__ == "__main__":
+    main()
