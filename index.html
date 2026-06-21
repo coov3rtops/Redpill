@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Notes Archive</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400;500&display=swap');
+        
+        :root {
+            --bg: #f6f6f8;
+            --sidebar-bg: #ffffff;
+            --text: #1d1d1f;
+            --text-secondary: #6e6e73;
+            --border: #d2d2d7;
+            --hover: #f2f2f7;
+            --preview-bg: #ffffff;
+        }
+        
+        [data-theme="dark"] {
+            --bg: #1c1c1e;
+            --sidebar-bg: #2c2c2e;
+            --text: #f5f5f7;
+            --text-secondary: #a1a1a6;
+            --border: #3a3a3c;
+            --hover: #3a3a3c;
+            --preview-bg: #2c2c2e;
+        }
+
+        body { 
+            margin:0; 
+            font-family:'SF Pro Display', -apple-system, sans-serif; 
+            background:var(--bg); 
+            color:var(--text); 
+            display:flex; 
+            height:100vh; 
+            overflow:hidden; 
+        }
+        
+        .sidebar { 
+            width:380px; 
+            background:var(--sidebar-bg); 
+            border-right:1px solid var(--border); 
+            overflow-y:auto; 
+            padding:12px 0; 
+            box-shadow:2px 0 8px rgba(0,0,0,0.1); 
+        }
+        .header { 
+            padding:0 20px 8px; 
+            font-size:13px; 
+            font-weight:500; 
+            color:var(--text-secondary); 
+            text-transform:uppercase; 
+            letter-spacing:0.5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .theme-toggle {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            color: var(--text-secondary);
+        }
+        .theme-toggle:hover { background: var(--hover); }
+
+        ul { list-style:none; margin:0; padding:0; }
+        li { padding:8px 20px; display:flex; align-items:center; gap:12px; cursor:pointer; transition:background 0.2s; }
+        li:hover { background:var(--hover); }
+        li a { 
+            text-decoration:none; 
+            color:var(--text); 
+            flex:1; 
+            display:flex; 
+            align-items:center; 
+            gap:12px; 
+            font-size:15px; 
+        }
+        .thumb { width:52px; height:52px; object-fit:cover; border-radius:8px; background:#f0f0f0; flex-shrink:0; }
+        .no-thumb { width:52px; height:52px; display:flex; align-items:center; justify-content:center; font-size:28px; background:#f0f0f0; border-radius:8px; flex-shrink:0; }
+        .title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+        .date { font-size:12px; color:var(--text-secondary); white-space:nowrap; }
+
+        .preview-pane { 
+            flex:1; 
+            background:var(--preview-bg); 
+            overflow:auto; 
+            padding:40px; 
+            color: var(--text);
+        }
+        .preview-pane iframe { 
+            width:100%; 
+            height:100%; 
+            border:none; 
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="header">
+            All Notes • 4 total
+            <button class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">🌙</button>
+        </div>
+        <ul id="notes-list">
+            <li>
+                <a href="Gravity Bridge.html" class="note-link" data-file="Gravity Bridge.html">
+                    <div class="no-thumb">📄</div>
+                    <span class="title">Gravity Bridge</span>
+                    <span class="date">Apr 19</span>
+                </a>
+            </li>
+            <li>
+                <a href="Gravity Bridge (2).html" class="note-link" data-file="Gravity Bridge (2).html">
+                    <div class="no-thumb">📄</div>
+                    <span class="title">Gravity Bridge (2)</span>
+                    <span class="date">Apr 19</span>
+                </a>
+            </li>
+            <li>
+                <a href="Improving Lyme Disease Detection among Insured Providers.html" class="note-link" data-file="Improving Lyme Disease Detection among Insured Providers.html">
+                    <div class="no-thumb">📄</div>
+                    <span class="title">Improving Lyme Disease Detection among Insured Providers</span>
+                    <span class="date">Mar 07</span>
+                </a>
+            </li>
+            <li>
+                <a href="Improving Vibration Dampening with Quantum.html" class="note-link" data-file="Improving Vibration Dampening with Quantum.html">
+                    <div class="no-thumb">📄</div>
+                    <span class="title">Improving Vibration Dampening with Quantum</span>
+                    <span class="date">Nov 16</span>
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <div class="preview-pane" id="preview">
+        <iframe id="note-frame" src=""></iframe>
+    </div>
+
+    <script>
+        const toggle = document.getElementById('theme-toggle');
+        const body = document.body;
+        const frame = document.getElementById('note-frame');
+
+        // Load saved theme
+        if (localStorage.getItem('theme') === 'dark') {
+            body.setAttribute('data-theme', 'dark');
+            toggle.textContent = '☀️';
+        }
+
+        toggle.addEventListener('click', () => {
+            if (body.getAttribute('data-theme') === 'dark') {
+                body.removeAttribute('data-theme');
+                toggle.textContent = '🌙';
+                localStorage.setItem('theme', 'light');
+            } else {
+                body.setAttribute('data-theme', 'dark');
+                toggle.textContent = '☀️';
+                localStorage.setItem('theme', 'dark');
+            }
+        });
+
+        // Note loading
+        document.querySelectorAll('.note-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const file = this.getAttribute('data-file');
+                frame.src = file;
+            });
+        });
+
+        // Load first note
+        const firstLink = document.querySelector('.note-link');
+        if (firstLink) frame.src = firstLink.getAttribute('data-file');
+    </script>
+</body>
+</html>
