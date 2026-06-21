@@ -1,32 +1,54 @@
 #!/bin/bash
 
 # =============================================
-# Auto Update Notes Archive
-# Double-click this file to update everything
+# Smart Auto Update for Redpill Dispensary Notes
+# Double-click friendly + handles common issues
 # =============================================
 
-cd "$(dirname "$0")"   # Go to the folder where this script lives
+cd "$(dirname "$0")"
 
-echo "===================================="
-echo "🚀 Updating Redpill Dispensary Notes"
-echo "===================================="
+echo "========================================"
+echo "🚀 Redpill Dispensary Notes Updater"
+echo "========================================"
 
-# Pull latest changes from GitHub
-echo "📥 Pulling latest changes..."
-git pull --rebase
+# === Setup remote if missing ===
+if ! git config --get remote.origin.url > /dev/null; then
+    echo "⚠️  Remote not configured. Please run this once in Terminal:"
+    echo "   git remote add origin https://github.com/coov3rtops/Redpill.git"
+    echo ""
+    read -p "Press Enter after you have set the remote..."
+fi
 
-# Run the Python script to regenerate index + thumbnails
-echo "🔄 Regenerating index.html and thumbnails..."
+echo "📥 Pulling latest changes from GitHub..."
+git fetch origin
+
+# Smart pull strategy
+if git merge-base --is-ancestor origin/main main 2>/dev/null; then
+    git pull --rebase origin main
+else
+    echo "🔄 Merging changes (keeping your local files)..."
+    git pull origin main --strategy-option=theirs --allow-unrelated-histories
+fi
+
+# Regenerate the website
+echo "🔄 Regenerating index.html + thumbnails..."
 python3 generate_index.py
 
-# Add all changes and push to GitHub (triggers Cloudflare rebuild)
+# Commit and push
 echo "📤 Pushing updates to GitHub..."
-git add .
-git commit -m "Auto-update: $(date '+%Y-%m-%d %H:%M')" 2>/dev/null || echo "No changes to commit"
-git push
+git add -A
+
+if git diff --cached --quiet; then
+    echo "✓ No changes to commit"
+else
+    git commit -m "Auto-update: $(date '+%Y-%m-%d %H:%M:%S')"
+fi
+
+git push origin main || git push -f origin main
 
 echo ""
-echo "✅ Done! Your site has been updated."
-echo "🌐 Cloudflare should rebuild automatically in ~30 seconds."
+echo "🎉 Update completed successfully!"
+echo "🌐 Cloudflare Pages should be rebuilding right now."
 echo ""
-read -p "Press Enter to close..."
+echo "You can close this window."
+read -p "Press Enter to exit..."
