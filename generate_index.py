@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import os
-import sys
 from datetime import datetime
 from pathlib import Path
 from bs4 import BeautifulSoup
 from PIL import Image
 import io
+import base64
+import re
 
 # ================== CONFIGURATION ==================
 FOLDER_PATH = "."   
@@ -19,16 +20,36 @@ def create_thumbnail_dir(root):
     return thumb_dir
 
 def extract_first_image_base64(html_file):
+    """Improved image extractor for Apple Notes exports"""
     try:
         with open(html_file, 'r', encoding='utf-8') as f:
             soup = BeautifulSoup(f, 'html.parser')
+        
+        # Strategy 1: Any <img> with data:image base64
+        for img in soup.find_all('img'):
+            src = img.get('src', '')
+            if src.startswith('data:image'):
+                try:
+                    header, b64_data = src.split(',', 1)
+                    return base64.b64decode(b64_data)
+                except:
+                    continue
+        
+        # Strategy 2: Look for base64 in any attribute
+        base64_pattern = re.compile(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)')
+        match = base64_pattern.search(str(soup))
+        if match:
+            return base64.b64decode(match.group(1))
+        
+        # Strategy 3: Any img tag (in case Apple Notes uses relative paths)
         img = soup.find('img')
-        if img and img.get('src', '').startswith('data:image'):
-            header, base64_data = img['src'].split(',', 1)
-            return base64.b64decode(base64_data)
-    except:
-        pass
-    return None
+        if img:
+            print(f"   ⚠️  Found <img> but no base64 in: {html_file.name}")
+        
+        return None
+    except Exception as e:
+        print(f"   ❌ Error extracting image from {html_file.name}: {e}")
+        return None
 
 def save_thumbnail(image_bytes, thumb_path):
     try:
@@ -43,8 +64,9 @@ def main():
     root = Path(FOLDER_PATH).resolve()
     thumb_dir = create_thumbnail_dir(root)
     notes = []
+    thumb_count = 0
     
-    print(f"🔍 Scanning and generating thumbnails...")
+    print(f"🔍 Scanning folder for notes and images...")
 
     for html_file in sorted(root.rglob("*.html")):
         if html_file.name.lower() in ["index.html", "generate_index.py"]:
@@ -55,11 +77,18 @@ def main():
 
         img_bytes = extract_first_image_base64(html_file)
         thumb_rel = None
+
         if img_bytes:
             thumb_filename = f"{html_file.stem}.png"
             thumb_path = thumb_dir / thumb_filename
             if save_thumbnail(img_bytes, thumb_path):
                 thumb_rel = f"{THUMBNAILS_FOLDER}/{thumb_filename}"
+                thumb_count += 1
+                print(f"   ✅ Thumbnail created: {thumb_filename}")
+            else:
+                print(f"   ❌ Failed to save thumbnail for: {title}")
+        else:
+            print(f"   📄 No image found: {title}")
 
         mod_time = datetime.fromtimestamp(html_file.stat().st_mtime)
         date_str = mod_time.strftime("%b %d")
@@ -73,7 +102,10 @@ def main():
 
     notes.sort(key=lambda x: x["title"].lower())
 
-    print(f"✅ Building improved dark mode version...")
+    print(f"\n✅ Found {len(notes)} notes | Created {thumb_count} thumbnails")
+
+    # === Build HTML with Version ===
+    version = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -104,75 +136,22 @@ def main():
             --preview-bg: #2c2c2e;
         }}
 
-        body {{ 
-            margin:0; 
-            font-family:'SF Pro Display', -apple-system, sans-serif; 
-            background:var(--bg); 
-            color:var(--text); 
-            display:flex; 
-            height:100vh; 
-            overflow:hidden; 
-        }}
-        
-        .sidebar {{ 
-            width:380px; 
-            background:var(--sidebar-bg); 
-            border-right:1px solid var(--border); 
-            overflow-y:auto; 
-            padding:12px 0; 
-            box-shadow:2px 0 8px rgba(0,0,0,0.1); 
-        }}
-        .header {{ 
-            padding:0 20px 8px; 
-            font-size:13px; 
-            font-weight:500; 
-            color:var(--text-secondary); 
-            text-transform:uppercase; 
-            letter-spacing:0.5px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }}
-        .theme-toggle {{
-            background: none;
-            border: none;
-            font-size: 20px;
-            cursor: pointer;
-            padding: 4px 8px;
-            border-radius: 6px;
-            color: var(--text-secondary);
-        }}
-        .theme-toggle:hover {{ background: var(--hover); }}
-
+        body {{ margin:0; font-family:'SF Pro Display', -apple-system, sans-serif; background:var(--bg); color:var(--text); display:flex; height:100vh; overflow:hidden; }}
+        .sidebar {{ width:380px; background:var(--sidebar-bg); border-right:1px solid var(--border); overflow-y:auto; padding:12px 0; box-shadow:2px 0 8px rgba(0,0,0,0.1); }}
+        .header {{ padding:0 20px 8px; font-size:13px; font-weight:500; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; display:flex; justify-content:space-between; align-items:center; }}
+        .theme-toggle {{ background:none; border:none; font-size:20px; cursor:pointer; padding:4px 8px; border-radius:6px; color:var(--text-secondary); }}
+        .theme-toggle:hover {{ background:var(--hover); }}
         ul {{ list-style:none; margin:0; padding:0; }}
         li {{ padding:8px 20px; display:flex; align-items:center; gap:12px; cursor:pointer; transition:background 0.2s; }}
         li:hover {{ background:var(--hover); }}
-        li a {{ 
-            text-decoration:none; 
-            color:var(--text); 
-            flex:1; 
-            display:flex; 
-            align-items:center; 
-            gap:12px; 
-            font-size:15px; 
-        }}
+        li a {{ text-decoration:none; color:var(--text); flex:1; display:flex; align-items:center; gap:12px; font-size:15px; }}
         .thumb {{ width:52px; height:52px; object-fit:cover; border-radius:8px; background:#f0f0f0; flex-shrink:0; }}
         .no-thumb {{ width:52px; height:52px; display:flex; align-items:center; justify-content:center; font-size:28px; background:#f0f0f0; border-radius:8px; flex-shrink:0; }}
         .title {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }}
         .date {{ font-size:12px; color:var(--text-secondary); white-space:nowrap; }}
-
-        .preview-pane {{ 
-            flex:1; 
-            background:var(--preview-bg); 
-            overflow:auto; 
-            padding:40px; 
-            color: var(--text);
-        }}
-        .preview-pane iframe {{ 
-            width:100%; 
-            height:100%; 
-            border:none; 
-        }}
+        .preview-pane {{ flex:1; background:var(--preview-bg); overflow:auto; padding:40px; }}
+        .preview-pane iframe {{ width:100%; height:100%; border:none; }}
+        .version {{ font-size:11px; color:#999; text-align:center; padding:8px; }}
     </style>
 </head>
 <body>
@@ -195,7 +174,8 @@ def main():
             </li>
 """
 
-    html_content += """        </ul>
+    html_content += f"""        </ul>
+        <div class="version">Updated {version}</div>
     </div>
 
     <div class="preview-pane" id="preview">
@@ -207,44 +187,17 @@ def main():
         const body = document.body;
         const frame = document.getElementById('note-frame');
 
-        // Load saved theme
-        if (localStorage.getItem('theme') === 'dark') {
+        if (localStorage.getItem('theme') === 'dark') {{
             body.setAttribute('data-theme', 'dark');
             toggle.textContent = '☀️';
-        }
+        }}
 
-        toggle.addEventListener('click', () => {
-            if (body.getAttribute('data-theme') === 'dark') {
+        toggle.addEventListener('click', () => {{
+            if (body.getAttribute('data-theme') === 'dark') {{
                 body.removeAttribute('data-theme');
                 toggle.textContent = '🌙';
                 localStorage.setItem('theme', 'light');
-            } else {
+            }} else {{
                 body.setAttribute('data-theme', 'dark');
                 toggle.textContent = '☀️';
-                localStorage.setItem('theme', 'dark');
-            }
-        });
-
-        // Note loading
-        document.querySelectorAll('.note-link').forEach(link => {
-            link.addEventListener('click', function(e) {
-                e.preventDefault();
-                const file = this.getAttribute('data-file');
-                frame.src = file;
-            });
-        });
-
-        // Load first note
-        const firstLink = document.querySelector('.note-link');
-        if (firstLink) frame.src = firstLink.getAttribute('data-file');
-    </script>
-</body>
-</html>"""
-
-    with open(root / "index.html", "w", encoding="utf-8") as f:
-        f.write(html_content)
-    
-    print(f"🎉 Improved dark mode with white text applied!")
-
-if __name__ == "__main__":
-    main()
+                local
