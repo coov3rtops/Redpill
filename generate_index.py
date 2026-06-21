@@ -20,12 +20,10 @@ def create_thumbnail_dir(root):
     return thumb_dir
 
 def extract_first_image_base64(html_file):
-    """Improved image extractor for Apple Notes exports"""
     try:
         with open(html_file, 'r', encoding='utf-8') as f:
             soup = BeautifulSoup(f, 'html.parser')
         
-        # Strategy 1: <img> with data:image base64
         for img in soup.find_all('img'):
             src = img.get('src', '')
             if src.startswith('data:image'):
@@ -35,7 +33,6 @@ def extract_first_image_base64(html_file):
                 except:
                     continue
         
-        # Strategy 2: Search anywhere in the HTML for base64 images
         base64_pattern = re.compile(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)')
         match = base64_pattern.search(str(soup))
         if match:
@@ -200,4 +197,89 @@ def main():
             background:var(--preview-bg); 
             overflow:auto; 
             padding:40px; 
-            color:
+            color: var(--text);
+        }}
+        .preview-pane iframe {{ 
+            width:100%; 
+            height:100%; 
+            border:none; 
+        }}
+        .version {{ 
+            font-size:11px; 
+            color:var(--text-secondary); 
+            text-align:center; 
+            padding:12px 0; 
+            border-top:1px solid var(--border);
+        }}
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="header">
+            All Notes • {len(notes)} total
+            <button class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">🌙</button>
+        </div>
+        <ul id="notes-list">
+"""
+
+    for note in notes:
+        thumb_html = f'<img class="thumb" src="{note["thumb"]}" alt="">' if note['thumb'] else '<div class="no-thumb">📄</div>'
+        html_content += f"""            <li>
+                <a href="{note['file']}" class="note-link" data-file="{note['file']}">
+                    {thumb_html}
+                    <span class="title">{note['title']}</span>
+                    <span class="date">{note['date']}</span>
+                </a>
+            </li>
+"""
+
+    html_content += f"""        </ul>
+        <div class="version">Updated {version}</div>
+    </div>
+
+    <div class="preview-pane" id="preview">
+        <iframe id="note-frame" src=""></iframe>
+    </div>
+
+    <script>
+        const toggle = document.getElementById('theme-toggle');
+        const body = document.body;
+        const frame = document.getElementById('note-frame');
+
+        if (localStorage.getItem('theme') === 'dark') {{
+            body.setAttribute('data-theme', 'dark');
+            toggle.textContent = '☀️';
+        }}
+
+        toggle.addEventListener('click', () => {{
+            if (body.getAttribute('data-theme') === 'dark') {{
+                body.removeAttribute('data-theme');
+                toggle.textContent = '🌙';
+                localStorage.setItem('theme', 'light');
+            }} else {{
+                body.setAttribute('data-theme', 'dark');
+                toggle.textContent = '☀️';
+                localStorage.setItem('theme', 'dark');
+            }}
+        }});
+
+        document.querySelectorAll('.note-link').forEach(link => {{
+            link.addEventListener('click', function(e) {{
+                e.preventDefault();
+                frame.src = this.getAttribute('data-file');
+            }});
+        }});
+
+        const firstLink = document.querySelector('.note-link');
+        if (firstLink) frame.src = firstLink.getAttribute('data-file');
+    </script>
+</body>
+</html>"""
+
+    with open(root / "index.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+    
+    print(f"🎉 index.html updated with version {version}")
+
+if __name__ == "__main__":
+    main()
