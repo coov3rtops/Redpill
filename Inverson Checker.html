@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inversion Checker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; }
+    .risk { background: linear-gradient(135deg, #f59e0b, #dc2626); }
+  </style>
+</head>
+<body class="bg-zinc-950 text-white min-h-screen p-4">
+  <div class="max-w-lg mx-auto">
+    <h1 class="text-3xl font-bold text-center mb-6 text-amber-400">🌡️ Inversion Checker</h1>
+
+    <div class="bg-zinc-900 rounded-2xl p-6 shadow-xl">
+      <!-- Location Input -->
+      <div class="flex gap-2 mb-6">
+        <input id="locationInput" type="text" placeholder="Zip code or lat,lon (e.g. 43021 or 40.7,-82.5)" 
+               class="flex-1 bg-zinc-800 text-white px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400">
+        <button onclick="checkLocation()" 
+                class="bg-amber-500 hover:bg-amber-600 px-6 py-3 rounded-xl font-medium">Check</button>
+      </div>
+
+      <div id="status" class="text-center text-sm text-zinc-400 mb-4"></div>
+
+      <!-- Current Conditions -->
+      <div id="current" class="mb-8"></div>
+
+      <!-- Forecast -->
+      <div id="forecast" class="space-y-3"></div>
+    </div>
+
+    <div class="text-center text-xs text-zinc-500 mt-8">
+      Data from Open-Meteo • Auto-refreshes every 60 seconds<br>
+      Default: Mansfield, OH (40.6, -82.5)
+    </div>
+  </div>
+
+  <script>
+    const DEFAULT_LAT = 40.6;
+    const DEFAULT_LON = -82.5;
+
+    async function getCoords(input) {
+      if (!input) return [DEFAULT_LAT, DEFAULT_LON];
+      
+      if (input.includes(',')) {
+        const [lat, lon] = input.split(',').map(Number);
+        return [lat, lon];
+      }
+      
+      // Try zip code
+      try {
+        const res = await fetch(`https://api.zippopotam.us/us/${input}`);
+        const data = await res.json();
+        return [parseFloat(data.places[0].latitude), parseFloat(data.places[0].longitude)];
+      } catch (e) {
+        return [DEFAULT_LAT, DEFAULT_LON];
+      }
+    }
+
+    async function checkWeather(lat, lon, name = "") {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=cloud_cover,wind_speed_10m,temperature_2m,dew_point_2m,relative_humidity_2m&current=temperature_2m,dew_point_2m,relative_humidity_2m,wind_speed_10m,cloud_cover&timezone=auto&forecast_days=2`;
+      
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        const c = data.current;
+        const dep = c.temperature_2m - c.dew_point_2m;
+        const isRiskNow = c.cloud_cover < 35 && c.wind_speed_10m < 8 && dep > 8 && c.relative_humidity_2m < 65;
+
+        // Current
+        document.getElementById('current').innerHTML = `
+          <div class="bg-zinc-800 rounded-2xl p-5">
+            <div class="text-sm text-zinc-400 mb-1">CURRENT CONDITIONS</div>
+            <div class="text-4xl font-bold">${c.temperature_2m}°C</div>
+            <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
+              <div>Dew Point: ${c.dew_point_2m}°C</div>
+              <div>RH: ${c.relative_humidity_2m}%</div>
+              <div>Wind: ${c.wind_speed_10m.toFixed(1)} km/h</div>
+              <div>Clouds: ${c.cloud_cover}%</div>
+            </div>
+            ${isRiskNow ? `<div class="risk text-white text-center py-3 mt-4 rounded-xl font-bold">✅ HIGH INVERSION RISK RIGHT NOW</div>` : `<div class="text-green-400 text-center py-3 mt-4">→ No strong inversion currently</div>`}
+          </div>`;
+
+        // Forecast
+        let html = `<div class="text-sm text-zinc-400 mb-3">FORECASTED HIGH RISK PERIODS</div>`;
+        let found = 0;
+
+        for (let i = 0; i < data.hourly.time.length; i++) {
+          const hour = parseInt(data.hourly.time[i].slice(11,13));
+          if (!(hour >= 15 || hour <= 9)) continue;
+
+          const cloud = data.hourly.cloud_cover[i];
+          const wind = data.hourly.wind_speed_10m[i];
+          const temp = data.hourly.temperature_2m[i];
+          const dew = data.hourly.dew_point_2m[i];
+          const rh = data.hourly.relative_humidity_2m[i];
+
+          if (cloud < 35 && wind < 8 && (temp - dew) > 8 && rh < 65) {
+            found++;
+            const time = new Date(data.hourly.time[i]).toLocaleString('en-US', {weekday:'short', hour:'numeric', minute:'2-digit'});
+            html += `<div class="bg-zinc-800 rounded-xl p-4 flex justify-between items-center">
+              <div>${time}</div>
+              <div class="text-amber-400">Clouds ${cloud}% • Wind ${wind} km/h</div>
+            </div>`;
+          }
+        }
+
+        if (found === 0) html += `<div class="text-zinc-400 italic text-center py-8">No strong inversion periods in the next 36 hours</div>`;
+        
+        document.getElementById('forecast').innerHTML = html;
+
+      } catch (e) {
+        document.getElementById('status').innerHTML = "❌ Error fetching data. Check internet.";
+      }
+    }
+
+    async function checkLocation() {
+      const input = document.getElementById('locationInput').value.trim();
+      const [lat, lon] = await getCoords(input);
+      await checkWeather(lat, lon);
+    }
+
+    // Auto refresh every 60 seconds
+    setInterval(() => checkWeather(DEFAULT_LAT, DEFAULT_LON), 60000);
+
+    // Initial load
+    window.onload = () => checkWeather(DEFAULT_LAT, DEFAULT_LON);
+  </script>
+</body>
+</html>
