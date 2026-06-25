@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ohio Wells - Depth to Water + Radon (EPA 4 pCi/L Standard)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    th, td { padding: 12px; border: 1px solid #ddd; text-align: center; }
+    th { background: #007cba; color: white; }
+    tr:nth-child(even) { background: #f8f8f8; }
+    .value { font-weight: bold; font-size: 1.1em; }
+    .forecast { font-style: italic; color: #d35400; }
+    .high { color: #e74c3c; font-weight: bold; }
+    .moderate { color: #f39c12; }
+    .low { color: #27ae60; }
+  </style>
+</head>
+<body>
+  <h1>Ohio Reliable Groundwater Wells — Depth to Water + Radon Risk</h1>
+  <p><strong>Model based on DTW + EPA Indoor Air Standard (4 pCi/L action level)</strong></p>
+
+  <table id="dataTable">
+    <thead>
+      <tr>
+        <th>Site ID</th>
+        <th>Name/Alias</th>
+        <th>Most Recent DTW (ft)</th>
+        <th>Date</th>
+        <th>6-Month Forecast DTW (Dec 2026)</th>
+        <th>Est. Dissolved Radon (Water pCi/L)</th>
+        <th>Est. Indoor Air Contribution (pCi/L)</th>
+        <th>Risk vs EPA 4 pCi/L</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    const reliableSites = [
+      { id: "392016082272400", name: "V-100 OH", dtw: 54.31, date: "2026-06-25", forecastDTW: 54.5 },
+      { id: "393318084190100", name: "W-10 OH", dtw: 18.08, date: "2026-06-25", forecastDTW: 18.5 },
+      { id: "413108084415300", name: "WM-12 OH", dtw: 10.09, date: "2026-06-25", forecastDTW: 11.0 },
+      { id: "404648083412600", name: "HN-2A OH", dtw: 6.89, date: "2026-06-10", forecastDTW: 9.0 },
+      { id: "392553081281600", name: "WA-2 OH", dtw: 28.88, date: "2026-06-10", forecastDTW: 30.0 },
+      { id: "401707084103100", name: "SH-5 OH", dtw: 61.61, date: "2026-06-10", forecastDTW: 60.0 },
+      { id: "413812084444601", name: "WM-111 OH", dtw: 43.58, date: "2026-06-10", forecastDTW: 44.0 }
+    ];
+
+    function calculateDissolvedRadon(dtw) {
+      let radon = 400 + 0.75 * (dtw - 30);
+      return Math.max(100, Math.min(1500, Math.round(radon)));
+    }
+
+    function calculateAirContribution(dissolved) {
+      // Rough conversion: ~10,000 pCi/L in water ≈ 1 pCi/L in air (typical household transfer)
+      return (dissolved / 10000).toFixed(2);
+    }
+
+    const tbody = document.querySelector("#dataTable tbody");
+
+    reliableSites.forEach(site => {
+      const dissolvedNow = calculateDissolvedRadon(site.dtw);
+      const dissolvedFuture = calculateDissolvedRadon(site.forecastDTW);
+      const airNow = parseFloat(calculateAirContribution(dissolvedNow));
+      const airFuture = parseFloat(calculateAirContribution(dissolvedFuture));
+
+      let risk = "Low";
+      let riskClass = "low";
+      if (airNow >= 4) {
+        risk = "High — Action Recommended";
+        riskClass = "high";
+      } else if (airNow >= 2) {
+        risk = "Moderate — Monitor";
+        riskClass = "moderate";
+      }
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${site.id}</td>
+        <td>${site.name}</td>
+        <td class="value">${site.dtw.toFixed(2)}</td>
+        <td>${site.date}</td>
+        <td class="forecast">${site.forecastDTW.toFixed(1)}</td>
+        <td>${dissolvedNow}</td>
+        <td class="${riskClass}">${airNow}</td>
+        <td class="${riskClass}">${risk}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  </script>
+
+  <p><strong>Key Notes:</strong><br>
+  • Dissolved Radon = estimated in groundwater (pCi/L) using your DTW-based model.<br>
+  • Indoor Air Contribution = rough estimate of radon transfer from water use (showering, washing, etc.).<br>
+  • <strong>EPA Action Level: 4 pCi/L in indoor air</strong>. Values ≥4 pCi/L suggest testing/mitigation is recommended.<br>
+  • This is a simplified model. Actual indoor air radon depends heavily on house construction, ventilation, and soil gas entry.</p>
+</body>
+</html>
