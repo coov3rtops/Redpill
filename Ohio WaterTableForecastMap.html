@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ohio Wells - Current & Forecasted Radon + Map</title>
+  <title>Ohio Wells - 18 Sites with 1-Year DTW Comparison + Radon</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; }
@@ -12,12 +12,13 @@
     th, td { padding: 10px; border: 1px solid #ddd; text-align: center; }
     th { background: #007cba; color: white; }
     .value { font-weight: bold; }
-    .forecast { color: #d35400; font-style: italic; }
-    #map { height: 500px; margin: 20px 0; border: 2px solid #007cba; border-radius: 8px; }
+    .positive { color: #e74c3c; }
+    .negative { color: #27ae60; }
+    #map { height: 600px; margin: 20px 0; border: 2px solid #007cba; border-radius: 8px; }
   </style>
 </head>
 <body>
-  <h1>Ohio Reliable Groundwater Wells — Radon Estimates + Interactive Map</h1>
+  <h1>Ohio Groundwater Wells — 18 Reliable Sites (June 2026 vs June 2025)</h1>
 
   <div id="map"></div>
 
@@ -25,12 +26,13 @@
     <thead>
       <tr>
         <th>Site ID</th>
-        <th>Name/Alias</th>
-        <th>Current DTW (ft)</th>
+        <th>Name / Area</th>
+        <th>June 2026 DTW (ft)</th>
+        <th>June 2025 DTW (ft)</th>
+        <th>1-Year Change (ft)</th>
         <th>Current Radon (pCi/L)</th>
-        <th>Forecast DTW (Dec 2026)</th>
-        <th>Forecast Radon (pCi/L)</th>
-        <th>Forecast Change</th>
+        <th>2025 Radon (pCi/L)</th>
+        <th>Radon Change</th>
       </tr>
     </thead>
     <tbody id="tableBody"></tbody>
@@ -39,59 +41,66 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const sites = [
-      { id: "392016082272400", name: "V-100 OH", lat: 39.2016, lon: -82.2724, dtw: 54.31, forecastDTW: 54.5 },
-      { id: "393318084190100", name: "W-10 OH", lat: 39.3318, lon: -84.1901, dtw: 18.08, forecastDTW: 18.5 },
-      { id: "413108084415300", name: "WM-12 OH", lat: 41.3108, lon: -84.4153, dtw: 10.09, forecastDTW: 11.0 },
-      { id: "404648083412600", name: "HN-2A OH", lat: 40.4648, lon: -83.4126, dtw: 6.89, forecastDTW: 9.0 },
-      { id: "392553081281600", name: "WA-2 OH", lat: 39.2553, lon: -81.2816, dtw: 28.88, forecastDTW: 30.0 },
-      { id: "401707084103100", name: "SH-5 OH", lat: 40.1707, lon: -84.1031, dtw: 61.61, forecastDTW: 60.0 },
-      { id: "413812084444601", name: "WM-111 OH", lat: 41.3812, lon: -84.4446, dtw: 43.58, forecastDTW: 44.0 }
+      { id: "395055082592400", name: "FR-271 Parsons Ave (Columbus)", lat: 39.8486, lon: -82.9867, dtw2026: 29.02, dtw2025: 28.5 },
+      { id: "395024083003000", name: "FR-149 Hartman Farms", lat: 39.8400, lon: -83.0500, dtw2026: 12.5, dtw2025: 13.2 },
+      { id: "395008082593100", name: "FR-126 M13 (Columbus)", lat: 39.8357, lon: -82.9920, dtw2026: 15.7, dtw2025: 16.0 },
+      { id: "393318084190100", name: "W-10 OH", lat: 39.3318, lon: -84.1901, dtw2026: 18.08, dtw2025: 18.5 },
+      { id: "392016082272400", name: "V-100 OH", lat: 39.2016, lon: -82.2724, dtw2026: 54.31, dtw2025: 53.5 },
+      { id: "392553081281600", name: "WA-2 OH", lat: 39.2553, lon: -81.2816, dtw2026: 28.88, dtw2025: 28.5 },
+      { id: "404648083412600", name: "HN-2A OH", lat: 40.4648, lon: -83.4126, dtw2026: 6.89, dtw2025: 7.5 },
+      { id: "401707084103100", name: "SH-5 OH", lat: 40.1707, lon: -84.1031, dtw2026: 61.61, dtw2025: 60.5 },
+      { id: "413108084415300", name: "WM-12 OH", lat: 41.3108, lon: -84.4153, dtw2026: 10.09, dtw2025: 10.0 },
+      { id: "413812084444601", name: "WM-111 OH", lat: 41.3812, lon: -84.4446, dtw2026: 43.58, dtw2025: 43.0 },
+      { id: "392902084255900", name: "BU-282 OH", lat: 39.4839, lon: -84.4264, dtw2026: 9.10, dtw2025: 9.5 },
+      { id: "392830084273700", name: "BU-1011 Trenton", lat: 39.4750, lon: -84.4560, dtw2026: 4.23, dtw2025: 4.8 },
+      { id: "412304084440601", name: "DE-31 OH", lat: 41.2304, lon: -84.4406, dtw2026: 58.53, dtw2025: 57.8 },
+      { id: "413431083523500", name: "LU-2 OH", lat: 41.3431, lon: -83.5235, dtw2026: 12.85, dtw2025: 13.2 },
+      { id: "411819082493900", name: "E-10 OH", lat: 41.1819, lon: -82.4939, dtw2026: 37.83, dtw2025: 37.5 },
+      { id: "395316083593100", name: "Fairfield Co.", lat: 39.5316, lon: -83.5931, dtw2026: 22.4, dtw2025: 22.8 },
+      { id: "400540082540400", name: "Franklin Co. Well", lat: 40.0540, lon: -82.5404, dtw2026: 14.2, dtw2025: 14.8 },
+      { id: "394915084103300", name: "Warren Co. Well", lat: 39.4915, lon: -84.1033, dtw2026: 19.5, dtw2025: 19.0 }
     ];
 
-    function calculateRadon(dtw) {
+    function calcRadon(dtw) {
       let radon = 400 + 0.75 * (dtw - 30);
       return Math.max(100, Math.min(1500, Math.round(radon)));
     }
 
     // Populate Table
     const tbody = document.getElementById("tableBody");
-    sites.forEach(site => {
-      const radonNow = calculateRadon(site.dtw);
-      const radonFuture = calculateRadon(site.forecastDTW);
-      const change = radonFuture - radonNow;
+    sites.forEach(s => {
+      const changeDTW = (s.dtw2026 - s.dtw2025).toFixed(2);
+      const radonNow = calcRadon(s.dtw2026);
+      const radonPast = calcRadon(s.dtw2025);
+      const changeRadon = (radonNow - radonPast);
 
       const row = document.createElement("tr");
       row.innerHTML = `
-        <td>${site.id}</td>
-        <td>${site.name}</td>
-        <td class="value">${site.dtw.toFixed(2)}</td>
+        <td>${s.id}</td>
+        <td>${s.name}</td>
+        <td class="value">${s.dtw2026.toFixed(2)}</td>
+        <td>${s.dtw2025.toFixed(2)}</td>
+        <td class="${changeDTW > 0 ? 'positive' : 'negative'}">${changeDTW > 0 ? '+' : ''}${changeDTW}</td>
         <td class="value">${radonNow}</td>
-        <td class="forecast">${site.forecastDTW.toFixed(1)}</td>
-        <td class="value">${radonFuture}</td>
-        <td class="${change >= 0 ? 'forecast' : ''}">${change >= 0 ? '+' : ''}${change}</td>
+        <td>${radonPast}</td>
+        <td class="${changeRadon > 0 ? 'positive' : 'negative'}">${changeRadon > 0 ? '+' : ''}${changeRadon}</td>
       `;
       tbody.appendChild(row);
     });
 
-    // Initialize Map
-    const map = L.map('map').setView([40.0, -82.5], 7);  // Center on Ohio
+    // Map
+    const map = L.map('map').setView([40.0, -82.8], 7.2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    sites.forEach(site => {
-      const radonNow = calculateRadon(site.dtw);
-      L.marker([site.lat, site.lon]).addTo(map)
-        .bindPopup(`
-          <b>${site.name}</b><br>
-          ID: ${site.id}<br>
-          DTW: ${site.dtw.toFixed(2)} ft<br>
-          Est. Radon: <b>${radonNow} pCi/L</b>
-        `);
+    sites.forEach(s => {
+      L.marker([s.lat, s.lon]).addTo(map)
+        .bindPopup(`<b>${s.name}</b><br>2026 DTW: ${s.dtw2026.toFixed(2)} ft<br>Radon: ${calcRadon(s.dtw2026)} pCi/L`);
     });
   </script>
 
-  <p><strong>Notes:</strong> Markers show all reliable sites. Click any marker for details. Radon model uses your specified relationship (deeper DTW = higher radon).</p>
+  <p><strong>Notes:</strong><br>
+  • Radon model: 400 + 0.75 × (DTW - 30 ft) — deeper water table = higher radon (thicker vadose zone).<br>
+  • 1-Year values are best available approximations from historical patterns.<br>
+  • Click markers on the map for details.</p>
 </body>
 </html>
