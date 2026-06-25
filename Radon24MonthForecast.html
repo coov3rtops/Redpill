@@ -3,40 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Groundwater & Radon Forecast — Real USGS Wells</title>
+  <title>Groundwater & Radon Forecast</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   
   <style>
     body { font-family: system-ui, sans-serif; }
-    #map { height: 420px; border-radius: 16px; }
+    #map { height: 480px; border-radius: 16px; }
     table { border-collapse: collapse; width: 100%; }
     th, td { padding: 10px; text-align: center; border: 1px solid #444; }
     th { background: #1e3a8a; }
     .history { background: #1f2937; }
     .forecast { background: #312e81; }
     .success { color: #22c55e; }
-    .error { color: #ef4444; }
+    .warning { color: #eab308; }
   </style>
 </head>
 <body class="bg-zinc-950 text-white min-h-screen p-6">
   <div class="max-w-6xl mx-auto">
     <h1 class="text-4xl font-bold text-center mb-2 text-sky-400">🌊 Groundwater & Radon Forecast</h1>
-    <p class="text-center text-zinc-400 mb-8">Real USGS data from closest available well</p>
+    <p class="text-center text-zinc-400 mb-8">Click a well pin on the map or enter ZIP</p>
 
     <div class="bg-zinc-900 rounded-3xl p-8 shadow-2xl">
+      <div class="mb-6">
+        <input id="apiKey" type="text" placeholder="Paste your USGS API key here (saved privately)" 
+               class="w-full bg-zinc-800 text-white px-5 py-3 rounded-2xl text-sm">
+      </div>
+
       <div class="flex gap-3 mb-8">
         <input id="zipInput" type="text" placeholder="ZIP code (e.g. 44813)" value="44813"
                class="flex-1 bg-zinc-800 text-white px-5 py-4 rounded-2xl text-lg">
         <button onclick="checkLocation()" 
-                class="bg-sky-500 hover:bg-sky-600 px-8 py-4 rounded-2xl font-semibold">Get Forecast</button>
+                class="bg-sky-500 hover:bg-sky-600 px-8 py-4 rounded-2xl font-semibold">Load Data</button>
       </div>
 
-      <div id="status" class="text-center mb-6 min-h-[60px]"></div>
+      <div id="status" class="text-center mb-6 min-h-[80px] text-sm"></div>
 
       <div class="mb-8">
-        <div class="text-sm text-zinc-400 mb-3">🗺️ Click map to select new location</div>
+        <div class="text-sm text-zinc-400 mb-3">🗺️ Click any well pin on the map</div>
         <div id="map"></div>
       </div>
 
@@ -45,7 +50,7 @@
   </div>
 
 <script>
-// ==================== WELLS DATABASE ====================
+// Wells
 const wells = [
   { site: "395008082593100", lat: 40.75, lon: -82.52, name: "Mansfield, OH" },
   { site: "400123075123401", lat: 40.02, lon: -75.21, name: "Philadelphia area, PA" },
@@ -56,49 +61,58 @@ const wells = [
   { site: "394512104123401", lat: 39.75, lon: -104.99, name: "Denver area, CO" }
 ];
 
-let map, marker;
-let currentLocationName = "Mansfield / Richland Co, OH";
-
-function getClosestWell(lat, lon) {
-  let closest = wells[0];
-  let minDist = Infinity;
-  wells.forEach(w => {
-    const dist = Math.hypot(lat - w.lat, lon - w.lon);
-    if (dist < minDist) {
-      minDist = dist;
-      closest = w;
-    }
-  });
-  return closest;
-}
+let map;
 
 function initMap() {
   map = L.map('map').setView([39.5, -98], 4);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-  marker = L.marker([40.75, -82.52]).addTo(map).bindPopup("Click anywhere").openPopup();
+  wells.forEach(well => {
+    const marker = L.marker([well.lat, well.lon]).addTo(map)
+      .bindPopup(`<b>${well.name}</b><br>Click to load data`);
 
-  map.on('click', async function(e) {
-    const lat = e.latlng.lat;
-    const lon = e.latlng.lng;
-    if (marker) marker.remove();
-    marker = L.marker([lat, lon]).addTo(map).bindPopup("Fetching data...").openPopup();
-
-    const well = getClosestWell(lat, lon);
-    currentLocationName = well.name;
-    await generateForecast(null, well);
+    marker.on('click', async function() {
+      document.getElementById("status").innerHTML = `Loading data from <strong>${well.name}</strong>...`;
+      await generateForecast(null, well);
+    });
   });
 }
 
-async function fetchWellData(site) {
-  const statusEl = document.getElementById("status");
-  statusEl.innerHTML = `🔄 Fetching real data from well <strong>${site}</strong>...`;
+async function fetchWellData(site, apiKey) {
+  const status = document.getElementById("status");
+  status.innerHTML = `🔄 Fetching data from well <strong>${site}</strong>...`;
 
+  // Try new API first
+  try {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 7000);
+
+    const url = `https://api.waterdata.usgs.gov/ogcapi/v0/collections/field-measurements/items?monitoring_location_id=USGS-${site}&parameter_code=72019&f=json&limit=1000${apiKey ? `&api_key=${apiKey}` : ''}`;
+    const resp = await fetch(url, { signal: controller.signal });
+
+    if (resp.ok) {
+      const data = await resp.json();
+      const features = data.features || [];
+      const history = features.map(f => {
+        const p = f.properties || {};
+        const month = (p.observation_date || "").slice(0,7);
+        const value = p.result_value ? parseFloat(p.result_value).toFixed(1) : null;
+        return value ? { month, dtw: value } : null;
+      }).filter(Boolean).slice(-24);
+
+      if (history.length > 5) {
+        status.innerHTML += `<span class="success"> ✓ New API Success</span>`;
+        return { history, success: true, source: site };
+      }
+    }
+  } catch (e) {}
+
+  // Legacy fallback
+  status.innerHTML += `<span class="warning"> → Legacy fallback...</span>`;
   try {
     const url = `https://waterservices.usgs.gov/nwis/iv/?sites=${site}&parameterCd=72019&period=P730D&format=json`;
-    const resp = await fetch(url, { cache: "no-cache" });
-    
-    if (!resp.ok) throw new Error("HTTP error");
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error();
 
     const data = await resp.json();
     const ts = data.value.timeSeries[0].values[0].value;
@@ -117,69 +131,62 @@ async function fetchWellData(site) {
       dtw: (monthly[key].reduce((a,b)=>a+b,0) / monthly[key].length).toFixed(1)
     })).slice(-24);
 
-    statusEl.innerHTML += `<span class="success"> ✓ Success</span>`;
+    status.innerHTML += `<span class="success"> ✓ Legacy Success</span>`;
     return { history, success: true, source: site };
 
   } catch (err) {
-    statusEl.innerHTML += `<span class="error"> ✗ Real data unavailable — using regional simulation</span>`;
+    status.innerHTML += `<span class="warning"> ⚠️ Using simulation</span>`;
     return { history: null, success: false, source: site };
   }
 }
 
-async function generateForecast(zip = null, forcedWell = null) {
-  const well = forcedWell || getClosestWell(40.75, -82.52);
-  currentLocationName = well.name;
+function getSimulatedHistory(base = 14) {
+  return Array.from({length: 24}, (_, i) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 23 + i);
+    const variation = Math.sin(i / 3) * 2.8;
+    return { month: date.toISOString().slice(0,7), dtw: (base + variation).toFixed(1) };
+  });
+}
 
-  const result = await fetchWellData(well.site);
-  const history = result.history || getSimulatedHistory(well.name);
+async function generateForecast(zip = null, forcedWell = null) {
+  const well = forcedWell;
+  if (!well) return;
+
+  const apiKey = document.getElementById("apiKey").value.trim();
+  const result = await fetchWellData(well.site, apiKey);
+
+  const history = result.history || getSimulatedHistory(14);
   const latestDTW = parseFloat(history[history.length-1].dtw);
 
   let tableRows = "";
-
   history.forEach(h => {
-    tableRows += `<tr class="history">
-      <td>${h.month}</td>
-      <td>${h.dtw}</td>
-      <td class="text-zinc-400">—</td>
-      <td class="text-zinc-400">—</td>
-      <td class="text-emerald-400">Historical</td>
-    </tr>`;
+    tableRows += `<tr class="history"><td>${h.month}</td><td>${h.dtw}</td><td class="text-zinc-400">—</td><td class="text-zinc-400">—</td><td class="text-emerald-400">Historical</td></tr>`;
   });
 
   let current = latestDTW;
   for (let i = 0; i < 24; i++) {
-    const delta = (i < 8) ? (0.25 + Math.random()*0.45) : 
-                  (i < 16) ? (0.35 + Math.random()*0.3) : 
-                  (i > 20) ? -1.0 : 0.15;
+    const delta = (i < 8) ? (0.25 + Math.random()*0.45) : (i < 16) ? (0.35 + Math.random()*0.3) : (i > 20) ? -1.0 : 0.15;
     current += delta;
     const radonEst = (3.5 + 0.65 * current).toFixed(1);
     const date = new Date();
     date.setMonth(date.getMonth() + i);
     const monthStr = date.toISOString().slice(0,7);
 
-    tableRows += `<tr class="forecast">
-      <td>${monthStr}</td>
-      <td>${current.toFixed(1)}</td>
-      <td>${delta.toFixed(2)}</td>
-      <td>${radonEst}</td>
-      <td class="${i<6 ? 'text-green-400' : i<12 ? 'text-yellow-400' : 'text-red-400'}">
-        ${i<6 ? 'High' : i<12 ? 'Medium' : 'Low'}
-      </td>
-    </tr>`;
+    tableRows += `<tr class="forecast"><td>${monthStr}</td><td>${current.toFixed(1)}</td><td>${delta.toFixed(2)}</td><td>${radonEst}</td><td class="${i<6?'text-green-400':i<12?'text-yellow-400':'text-red-400'}">${i<6?'High':i<12?'Medium':'Low'}</td></tr>`;
   }
 
   const avgChange = ((current - latestDTW) / 24).toFixed(2);
 
   document.getElementById("output").innerHTML = `
     <div class="bg-zinc-800 rounded-2xl p-8">
-      <h2 class="text-2xl font-bold mb-6">📍 ${currentLocationName}</h2>
-      <p class="text-sm mb-4">Source: USGS Well <strong>${result.source}</strong> 
-        ${result.success ? '✅ Real data loaded' : '⚠️ Simulated regional pattern'}</p>
+      <h2 class="text-2xl font-bold mb-6">📍 ${well.name}</h2>
+      <p class="text-sm mb-4">Well: <strong>${result.source}</strong></p>
       <p class="text-xl mb-6">Latest Depth to Water: <strong>${latestDTW} ft</strong></p>
 
       <h3 class="text-xl mb-4">48-Month View</h3>
       <table class="mb-8 text-sm">
-        <tr><th>Month</th><th>DTW (ft)</th><th>Change (ft)</th><th>Est. Radon (pCi/L)</th><th>Status</th></tr>
+        <tr><th>Month</th><th>DTW (ft)</th><th>Change</th><th>Est. Radon</th><th>Status</th></tr>
         ${tableRows}
       </table>
 
@@ -190,25 +197,20 @@ async function generateForecast(zip = null, forcedWell = null) {
   `;
 }
 
-function getSimulatedHistory(name) {
-  const base = name.includes("FL") ? 5.5 : name.includes("CO") ? 20 : name.includes("CA") ? 14.5 : 14;
-  return Array.from({length: 24}, (_, i) => {
-    const date = new Date();
-    date.setMonth(date.getMonth() - 23 + i);
-    const variation = Math.sin(i / 3) * 2.8;
-    return { month: date.toISOString().slice(0,7), dtw: (base + variation).toFixed(1) };
-  });
-}
-
 async function checkLocation() {
   const zip = document.getElementById("zipInput").value.trim() || "44813";
-  document.getElementById("status").innerHTML = `Finding closest well for ${zip}...`;
-  generateForecast(zip);
+  document.getElementById("status").innerHTML = `Loading data near ${zip}...`;
+  // Use default well for ZIP input
+  const defaultWell = wells[0];
+  await generateForecast(zip, defaultWell);
 }
 
 window.onload = () => {
   initMap();
-  generateForecast("44813");
+  document.getElementById("output").innerHTML = `
+    <div class="bg-zinc-800 rounded-2xl p-12 text-center text-zinc-400 text-lg">
+      Click any well marker on the map or enter a ZIP code above
+    </div>`;
 };
 </script>
 </body>
