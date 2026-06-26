@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Us</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="max-w-md w-full mx-4">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">Get in Touch</h1>
+            <p class="text-gray-600 mt-2">We'll get back to you as soon as possible.</p>
+        </div>
+
+        <!-- Contact Form -->
+        <div class="bg-white p-8 rounded-2xl shadow-lg">
+            <form action="https://formsubmit.co/nathan@cooverttechnical.com" method="POST">
+                
+                <!-- Name -->
+                <div class="mb-5">
+                    <label class="block text-gray-700 font-medium mb-2" for="name">Full Name</label>
+                    <input type="text" id="name" name="name" required
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 transition">
+                </div>
+
+                <!-- Email -->
+                <div class="mb-5">
+                    <label class="block text-gray-700 font-medium mb-2" for="email">Email Address</label>
+                    <input type="email" id="email" name="email" required
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 transition">
+                </div>
+
+                <!-- Subject (optional) -->
+                <div class="mb-5">
+                    <label class="block text-gray-700 font-medium mb-2" for="subject">Subject</label>
+                    <input type="text" id="subject" name="_subject" value="New message from website contact form"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 transition">
+                </div>
+
+                <!-- Message -->
+                <div class="mb-6">
+                    <label class="block text-gray-700 font-medium mb-2" for="message">Message</label>
+                    <textarea id="message" name="message" rows="5" required
+                              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 transition resize-y"></textarea>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 px-6 rounded-xl transition duration-200">
+                    Send Message
+                </button>
+
+                <!-- Optional: Thank you page after submission -->
+                <input type="hidden" name="_next" value="https://yourwebsite.com/thank-you.html">
+                
+                <!-- Honeypot (spam protection) -->
+                <input type="text" name="_honey" style="display:none">
+            </form>
+        </div>
+
+        <p class="text-center text-sm text-gray-500 mt-6">
+            We usually respond within 24 hours.
+        </p>
+    </div>
+</body>
+</html>
