@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inversion Checker - Imperial</title>
+  <title>Inversion Checker - Mansfield, OH</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -13,11 +13,12 @@
     .risk-high { background: linear-gradient(135deg, #f59e0b, #dc2626); }
     .risk-med  { background: #d97706; }
     #map { height: 380px; border-radius: 16px; background: #1f2937; }
+    .fog-type { border-left: 5px solid #22d3ee; }
   </style>
 </head>
 <body class="bg-zinc-950 text-white min-h-screen p-4">
   <div class="max-w-2xl mx-auto">
-    <h1 class="text-3xl font-bold text-center mb-6 text-amber-400">🌡️ Inversion Checker (Imperial)</h1>
+    <h1 class="text-3xl font-bold text-center mb-6 text-amber-400">🌡️ Inversion Checker (Mansfield, OH)</h1>
 
     <div class="bg-zinc-900 rounded-2xl p-6 shadow-xl">
       <div class="flex gap-2 mb-6">
@@ -53,8 +54,7 @@
     function kmhToMph(kmh) { return (kmh * 0.621371).toFixed(1); }
 
     function initMap() {
-      map = L.map('map').setView([39.8, -98.5], 4);
-
+      map = L.map('map').setView([40.6, -82.5], 8);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap',
         maxZoom: 19
@@ -88,28 +88,29 @@
       }
     }
 
-    function calculateInversionScore(data, isCurrent = true) {
-      let score = 0;
-      let cloud, windKmh, tempC, dewC, rh, pressure;
+    // New improved inversion logic (translated from Python)
+    function getInversionRisk(c, hour, isCurrent = false) {
+      const dep = c.temperature_2m - c.dew_point_2m;
+      const rh = c.relative_humidity_2m;
+      const cloud = c.cloud_cover;
+      const wind = c.wind_speed_10m;
 
-      if (isCurrent && data.current) {
-        const c = data.current;
-        cloud = c.cloud_cover; windKmh = c.wind_speed_10m; tempC = c.temperature_2m;
-        dewC = c.dew_point_2m; rh = c.relative_humidity_2m; pressure = c.pressure_msl || 1013;
-      } else {
-        const h = data.hourly;
-        cloud = h.cloud_cover[0]; windKmh = h.wind_speed_10m[0]; tempC = h.temperature_2m[0];
-        dewC = h.dew_point_2m[0]; rh = h.relative_humidity_2m[0]; pressure = h.pressure_msl ? h.pressure_msl[0] : 1013;
+      const isFogLikely = (rh >= 85 && dep <= 3.5) || cloud >= 80;
+      const isMorning = hour <= 10 || hour >= 20;   // Night / Early Morning
+
+      // Classic dry radiation
+      if (cloud < 35 && wind < 10 && dep > 8 && rh < 65) {
+        return { level: "high", type: "Classic Radiation", score: 95, message: "STRONG CLEAR-SKY INVERSION" };
       }
 
-      const depC = tempC - dewC;
-      if (cloud < 20) score += 30; else if (cloud < 35) score += 20;
-      if (windKmh < 5) score += 25; else if (windKmh < 8) score += 15;
-      if (depC > 12) score += 20; else if (depC > 8) score += 12;
-      if (pressure > 1020) score += 15; else if (pressure > 1013) score += 8;
-      if (rh < 60) score += 10;
+      // Moist / Fog type (time-aware)
+      let windLimit = isMorning ? 13 : 9;
+      if (wind < windLimit && isFogLikely) {
+        const type = isMorning ? "Moist/Fog (Morning)" : "Moist/Fog";
+        return { level: "high", type: type, score: 88, message: "MOIST/FOG INVERSION - Low-freq noise likely amplified" };
+      }
 
-      return Math.min(100, Math.round(score));
+      return { level: "low", type: "None", score: 35, message: "Low inversion risk" };
     }
 
     async function checkWeather(lat, lon) {
@@ -124,52 +125,78 @@
         const data = await res.json();
 
         const c = data.current;
-        const score = calculateInversionScore(data, true);
+        const now = new Date();
+        const currentHour = now.getHours();
+        const risk = getInversionRisk(c, currentHour, true);
+
         const tempF = cToF(c.temperature_2m);
         const dewF = cToF(c.dew_point_2m);
         const windMph = kmhToMph(c.wind_speed_10m);
 
-        let riskHTML = score >= 75 ? 
-          `<div class="risk-high text-white text-center py-4 mt-5 rounded-xl font-bold text-lg">✅ STRONG INVERSION (Score: ${score})</div>` :
-          score >= 60 ? 
-          `<div class="risk-med text-white text-center py-4 mt-5 rounded-xl font-bold">⚠️ MODERATE RISK (Score: ${score})</div>` :
-          `<div class="text-green-400 text-center py-4 mt-5">→ Low risk (Score: ${score})</div>`;
+        let riskHTML = '';
+        if (risk.level === "high") {
+          riskHTML = `<div class="risk-high text-white text-center py-5 mt-5 rounded-2xl font-bold text-xl shadow-lg">
+            ✅ ${risk.message}<br><span class="text-lg">(${risk.type})</span>
+          </div>`;
+        } else {
+          riskHTML = `<div class="bg-emerald-900 text-emerald-300 text-center py-5 mt-5 rounded-2xl">→ Low inversion risk</div>`;
+        }
 
         document.getElementById('current').innerHTML = `
-          <div class="bg-zinc-800 rounded-2xl p-5">
-            <div class="text-sm text-zinc-400 mb-1">CURRENT CONDITIONS</div>
-            <div class="text-5xl font-bold">${tempF}°F</div>
-            <div class="grid grid-cols-2 gap-4 mt-5 text-sm">
-              <div>Dew: ${dewF}°F</div><div>RH: ${c.relative_humidity_2m}%</div>
-              <div>Wind: ${windMph} mph</div><div>Clouds: ${c.cloud_cover}%</div>
-              <div>Pressure: ${c.pressure_msl.toFixed(0)} hPa</div>
+          <div class="bg-zinc-800 rounded-2xl p-6">
+            <div class="text-sm text-zinc-400 mb-2">CURRENT CONDITIONS</div>
+            <div class="text-6xl font-bold mb-1">${tempF}°F</div>
+            <div class="grid grid-cols-2 gap-4 text-sm">
+              <div>Dew Point: ${dewF}°F</div>
+              <div>RH: ${c.relative_humidity_2m}%</div>
+              <div>Wind: ${windMph} mph</div>
+              <div>Clouds: ${c.cloud_cover}%</div>
             </div>
             ${riskHTML}
           </div>`;
 
-        let html = `<div class="text-sm text-zinc-400 mb-3">FORECASTED HIGH RISK PERIODS</div>`;
+        // Forecast
+        let html = `<div class="text-sm text-zinc-400 mb-3">NEXT 36 HOURS — HIGH RISK PERIODS</div>`;
         let found = 0;
-        for (let i = 0; i < data.hourly.time.length; i++) {
-          const hour = parseInt(data.hourly.time[i].slice(11,13));
-          if (!(hour >= 15 || hour <= 9)) continue;
-          const hScore = calculateInversionScore({current: {
-            cloud_cover: data.hourly.cloud_cover[i],
-            wind_speed_10m: data.hourly.wind_speed_10m[i],
-            temperature_2m: data.hourly.temperature_2m[i],
-            dew_point_2m: data.hourly.dew_point_2m[i],
-            relative_humidity_2m: data.hourly.relative_humidity_2m[i],
-            pressure_msl: data.hourly.pressure_msl[i]
-          }}, true);
-          if (hScore >= 65) {
+        const h = data.hourly;
+
+        for (let i = 0; i < h.time.length; i++) {
+          const dt = new Date(h.time[i]);
+          const hour = dt.getHours();
+          if (dt < now) continue;
+
+          const fcData = {
+            temperature_2m: h.temperature_2m[i],
+            dew_point_2m: h.dew_point_2m[i],
+            relative_humidity_2m: h.relative_humidity_2m[i],
+            cloud_cover: h.cloud_cover[i],
+            wind_speed_10m: h.wind_speed_10m[i]
+          };
+
+          const fcRisk = getInversionRisk(fcData, hour);
+
+          if (fcRisk.level === "high") {
             found++;
-            const timeStr = new Date(data.hourly.time[i]).toLocaleString('en-US', {weekday:'short', hour:'numeric', minute:'2-digit'});
-            html += `<div class="bg-zinc-800 rounded-xl p-4 flex justify-between">
-              <div>${timeStr}</div>
-              <div class="text-amber-400">${cToF(data.hourly.temperature_2m[i])}°F • ${kmhToMph(data.hourly.wind_speed_10m[i])} mph (${hScore})</div>
+            const timeStr = dt.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+            const isMorning = hour <= 10;
+            
+            html += `<div class="bg-zinc-800 rounded-xl p-4 flex justify-between items-center ${isMorning ? 'fog-type' : ''}">
+              <div>
+                <span class="font-medium">${timeStr}</span><br>
+                <span class="text-xs text-zinc-500">${fcRisk.type}</span>
+              </div>
+              <div class="text-right">
+                <span class="text-amber-400">${cToF(h.temperature_2m[i])}°F</span><br>
+                <span class="text-xs">${kmhToMph(h.wind_speed_10m[i])} mph</span>
+              </div>
             </div>`;
           }
         }
-        if (found === 0) html += `<div class="text-zinc-400 italic text-center py-10">No strong inversion periods forecasted</div>`;
+
+        if (found === 0) {
+          html += `<div class="text-zinc-400 italic text-center py-12">No strong inversion periods in the next 36 hours</div>`;
+        }
+
         document.getElementById('forecast').innerHTML = html;
         document.getElementById('status').innerHTML = '';
       } catch (e) {
@@ -190,11 +217,12 @@
       checkWeather(lat, lon);
     }
 
-    setInterval(() => checkWeather(40.6, -82.5), 60000);
+    // Auto-refresh every 5 minutes
+    setInterval(() => checkWeather(40.6, -82.5), 300000);
 
     window.onload = function() {
       initMap();
-      checkWeather(40.6, -82.5);   // Force default load
+      checkWeather(40.6, -82.5);
     };
   </script>
 </body>
