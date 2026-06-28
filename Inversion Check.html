@@ -88,7 +88,7 @@
       }
     }
 
-    // New improved inversion logic (translated from Python)
+    // Updated inversion logic with dB boost (matched to Python version)
     function getInversionRisk(c, hour, isCurrent = false) {
       const dep = c.temperature_2m - c.dew_point_2m;
       const rh = c.relative_humidity_2m;
@@ -96,21 +96,45 @@
       const wind = c.wind_speed_10m;
 
       const isFogLikely = (rh >= 85 && dep <= 3.5) || cloud >= 80;
-      const isMorning = hour <= 10 || hour >= 20;   // Night / Early Morning
+      const isMorning = hour <= 10 || hour >= 19;
 
-      // Classic dry radiation
+      let boost = 0;
+
+      // Classic dry radiation inversion
       if (cloud < 35 && wind < 10 && dep > 8 && rh < 65) {
-        return { level: "high", type: "Classic Radiation", score: 95, message: "STRONG CLEAR-SKY INVERSION" };
+        boost = Math.min(20, 4 + (500 / 500) * 6); // ~500m reference
+        return { 
+          level: "high", 
+          type: "Classic Radiation", 
+          score: 95, 
+          message: "STRONG CLEAR-SKY INVERSION", 
+          boost: boost.toFixed(1)
+        };
       }
 
-      // Moist / Fog type (time-aware)
-      let windLimit = isMorning ? 13 : 9;
+      // Moist / Fog type
+      let windLimit = isMorning ? 13 : 10;
       if (wind < windLimit && isFogLikely) {
         const type = isMorning ? "Moist/Fog (Morning)" : "Moist/Fog";
-        return { level: "high", type: type, score: 88, message: "MOIST/FOG INVERSION - Low-freq noise likely amplified" };
+        boost = Math.min(15, 3 + (500 / 500) * 5);
+        return { 
+          level: "high", 
+          type: type, 
+          score: 88, 
+          message: "MOIST/FOG INVERSION - Low-freq noise likely amplified", 
+          boost: boost.toFixed(1)
+        };
       }
 
-      return { level: "low", type: "None", score: 35, message: "Low inversion risk" };
+      // Low risk
+      boost = wind > 5 ? 0 : 2;
+      return { 
+        level: "low", 
+        type: "None", 
+        score: 35, 
+        message: "Low inversion risk", 
+        boost: boost.toFixed(1)
+      };
     }
 
     async function checkWeather(lat, lon) {
@@ -136,10 +160,14 @@
         let riskHTML = '';
         if (risk.level === "high") {
           riskHTML = `<div class="risk-high text-white text-center py-5 mt-5 rounded-2xl font-bold text-xl shadow-lg">
-            ✅ ${risk.message}<br><span class="text-lg">(${risk.type})</span>
+            ✅ ${risk.message}<br>
+            <span class="text-lg">(${risk.type})</span><br>
+            <span class="text-2xl mt-2 block">+${risk.boost} dB boost</span>
           </div>`;
         } else {
-          riskHTML = `<div class="bg-emerald-900 text-emerald-300 text-center py-5 mt-5 rounded-2xl">→ Low inversion risk</div>`;
+          riskHTML = `<div class="bg-emerald-900 text-emerald-300 text-center py-5 mt-5 rounded-2xl">
+            → Low inversion risk (+${risk.boost} dB)
+          </div>`;
         }
 
         document.getElementById('current').innerHTML = `
@@ -187,7 +215,8 @@
               </div>
               <div class="text-right">
                 <span class="text-amber-400">${cToF(h.temperature_2m[i])}°F</span><br>
-                <span class="text-xs">${kmhToMph(h.wind_speed_10m[i])} mph</span>
+                <span class="text-xs">${kmhToMph(h.wind_speed_10m[i])} mph</span><br>
+                <span class="text-emerald-400 text-sm">+${fcRisk.boost} dB</span>
               </div>
             </div>`;
           }
