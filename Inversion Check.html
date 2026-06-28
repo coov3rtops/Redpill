@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inversion Checker - Mansfield, OH</title>
+  <title>Inversion Checker for Low Frequency Noise</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -18,7 +18,7 @@
 </head>
 <body class="bg-zinc-950 text-white min-h-screen p-4">
   <div class="max-w-2xl mx-auto">
-    <h1 class="text-3xl font-bold text-center mb-6 text-amber-400">🌡️ Inversion Checker (Mansfield, OH)</h1>
+    <h1 class="text-3xl font-bold text-center mb-6 text-amber-400">🌡️ Inversion Checker for Low Frequency Noise</h1>
 
     <div class="bg-zinc-900 rounded-2xl p-6 shadow-xl">
       <div class="flex gap-2 mb-6">
@@ -102,8 +102,8 @@
   </div>
 
   <script>
-    let selectedLat = 40.6;
-    let selectedLon = -82.5;
+    let selectedLat = 39.6;
+    let selectedLon = -83.0;
     let map = null;
     let marker = null;
 
@@ -111,7 +111,7 @@
     function kmhToMph(kmh) { return (kmh * 0.621371).toFixed(1); }
 
     function initMap() {
-      map = L.map('map').setView([40.6, -82.5], 8);
+      map = L.map('map').setView([39.6, -83.0], 8);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap',
         maxZoom: 19
@@ -123,7 +123,7 @@
         updateMarker();
       });
 
-      marker = L.marker([40.6, -82.5]).addTo(map);
+      marker = L.marker([39.6, -83.0]).addTo(map);
     }
 
     function updateMarker() {
@@ -166,7 +166,7 @@
     }
 
     async function getCoords(input) {
-      if (!input) return [40.6, -82.5];
+      if (!input) return [39.6, -83.0];
       if (input.includes(',')) return input.split(',').map(x => parseFloat(x.trim()));
       try {
         document.getElementById('status').innerHTML = `🔍 Looking up ${input}...`;
@@ -176,8 +176,8 @@
         document.getElementById('status').innerHTML = `✅ ${p['place name']}, ${p['state']}`;
         return [parseFloat(p.latitude), parseFloat(p.longitude)];
       } catch {
-        document.getElementById('status').innerHTML = `⚠️ Using default Mansfield, OH`;
-        return [40.6, -82.5];
+        document.getElementById('status').innerHTML = `⚠️ Using default Columbus, OH`;
+        return [39.6, -83.0];
       }
     }
 
@@ -325,7 +325,7 @@
 
     window.onload = () => {
       initMap();
-      checkWeather(40.6, -82.5);
+      checkWeather(39.6, -83.0);
     };
   </script>
 </body>
