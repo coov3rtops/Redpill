@@ -11,9 +11,7 @@
   <style>
     body { font-family: system-ui, sans-serif; }
     .risk-high { background: linear-gradient(135deg, #f59e0b, #dc2626); }
-    .risk-med  { background: #d97706; }
     #map { height: 380px; border-radius: 16px; background: #1f2937; }
-    .fog-type { border-left: 5px solid #22d3ee; }
   </style>
 </head>
 <body class="bg-zinc-950 text-white min-h-screen p-4">
@@ -25,8 +23,35 @@
         <input id="locationInput" type="text" placeholder="Zip code or lat,lon" 
                class="flex-1 bg-zinc-800 text-white px-4 py-3 rounded-xl">
         <button onclick="checkLocation()" 
-                class="bg-amber-500 hover:bg-amber-600 px-6 py-3 rounded-xl font-medium">Check</button>
+                class="bg-amber-500 hover:bg-amber-600 px-6 py-3 rounded-xl font-medium">Check Location</button>
       </div>
+
+      <!-- Distance -->
+      <div class="mb-6 p-5 bg-zinc-800 rounded-2xl">
+        <label class="block text-sm text-zinc-400 mb-2 font-medium">Distance to Source</label>
+        <div class="flex gap-3">
+          <input id="distanceInput" type="number" value="1" step="0.1"
+                 class="flex-1 bg-zinc-900 text-white px-4 py-3 rounded-xl text-xl font-medium">
+          <select id="unitSelect" class="bg-zinc-900 text-white px-6 py-3 rounded-xl">
+            <option value="mi" selected>miles</option>
+            <option value="km">kilometers</option>
+            <option value="m">meters</option>
+            <option value="ft">feet</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Measured LAeq -->
+      <div class="mb-6 p-5 bg-zinc-800 rounded-2xl">
+        <label class="block text-sm text-zinc-400 mb-2 font-medium">Your Measured LAeq (dB)</label>
+        <input id="laeqInput" type="number" value="65" step="0.1"
+               class="w-full bg-zinc-900 text-white px-4 py-3 rounded-xl text-xl font-medium">
+      </div>
+
+      <button onclick="recalculateAll()" 
+              class="w-full bg-emerald-600 hover:bg-emerald-700 py-4 rounded-2xl font-semibold text-lg mb-6">
+        Recalculate Boost
+      </button>
 
       <div id="status" class="text-center text-sm text-amber-400 mb-4 min-h-[1.5rem]"></div>
 
@@ -71,10 +96,24 @@
       marker = L.marker([40.6, -82.5]).addTo(map);
     }
 
+    function getDistanceInMeters() {
+      let val = parseFloat(document.getElementById('distanceInput').value) || 1;
+      const unit = document.getElementById('unitSelect').value;
+      switch(unit) {
+        case 'ft': return val * 0.3048;
+        case 'km': return val * 1000;
+        case 'mi': return val * 1609.34;
+        default: return val;
+      }
+    }
+
+    function getMeasuredLAeq() {
+      return parseFloat(document.getElementById('laeqInput').value) || 65;
+    }
+
     async function getCoords(input) {
       if (!input) return [40.6, -82.5];
       if (input.includes(',')) return input.split(',').map(x => parseFloat(x.trim()));
-      
       try {
         document.getElementById('status').innerHTML = `🔍 Looking up ${input}...`;
         const res = await fetch(`https://api.zippopotam.us/us/${input.trim()}`);
@@ -88,8 +127,7 @@
       }
     }
 
-    // Updated inversion logic with dB boost (matched to Python version)
-    function getInversionRisk(c, hour, isCurrent = false) {
+    function getInversionRisk(c, hour, distanceMeters) {
       const dep = c.temperature_2m - c.dew_point_2m;
       const rh = c.relative_humidity_2m;
       const cloud = c.cloud_cover;
@@ -99,157 +137,123 @@
       const isMorning = hour <= 10 || hour >= 19;
 
       let boost = 0;
-
-      // Classic dry radiation inversion
       if (cloud < 35 && wind < 10 && dep > 8 && rh < 65) {
-        boost = Math.min(20, 4 + (500 / 500) * 6); // ~500m reference
-        return { 
-          level: "high", 
-          type: "Classic Radiation", 
-          score: 95, 
-          message: "STRONG CLEAR-SKY INVERSION", 
-          boost: boost.toFixed(1)
-        };
+        boost = Math.min(20, 4 + (distanceMeters / 500) * 6);
+        return { level: "high", type: "Classic Radiation", message: "STRONG CLEAR-SKY INVERSION", boost: parseFloat(boost.toFixed(1)) };
       }
 
-      // Moist / Fog type
       let windLimit = isMorning ? 13 : 10;
       if (wind < windLimit && isFogLikely) {
+        boost = Math.min(15, 3 + (distanceMeters / 500) * 5);
         const type = isMorning ? "Moist/Fog (Morning)" : "Moist/Fog";
-        boost = Math.min(15, 3 + (500 / 500) * 5);
-        return { 
-          level: "high", 
-          type: type, 
-          score: 88, 
-          message: "MOIST/FOG INVERSION - Low-freq noise likely amplified", 
-          boost: boost.toFixed(1)
-        };
+        return { level: "high", type: type, message: "MOIST/FOG INVERSION", boost: parseFloat(boost.toFixed(1)) };
       }
 
-      // Low risk
       boost = wind > 5 ? 0 : 2;
-      return { 
-        level: "low", 
-        type: "None", 
-        score: 35, 
-        message: "Low inversion risk", 
-        boost: boost.toFixed(1)
-      };
+      return { level: "low", type: "None", message: "Low inversion risk", boost: parseFloat(boost.toFixed(1)) };
+    }
+
+    function recalculateAll() {
+      checkWeather(selectedLat, selectedLon);
     }
 
     async function checkWeather(lat, lon) {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-                  `&hourly=cloud_cover,wind_speed_10m,temperature_2m,dew_point_2m,relative_humidity_2m,pressure_msl` +
-                  `&current=temperature_2m,dew_point_2m,relative_humidity_2m,wind_speed_10m,cloud_cover,pressure_msl` +
-                  `&timezone=auto&forecast_days=2`;
+      const distanceMeters = getDistanceInMeters();
+      const distanceMiles = (distanceMeters / 1609.34).toFixed(2);
+      const measured = getMeasuredLAeq();
+
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=cloud_cover,wind_speed_10m,temperature_2m,dew_point_2m,relative_humidity_2m,pressure_msl&current=temperature_2m,dew_point_2m,relative_humidity_2m,wind_speed_10m,cloud_cover,pressure_msl&timezone=auto&forecast_days=2`;
 
       try {
-        document.getElementById('status').innerHTML = '🌤️ Loading weather data...';
+        document.getElementById('status').innerHTML = `🌤️ Loading... (${distanceMiles} mi)`;
         const res = await fetch(url);
         const data = await res.json();
 
         const c = data.current;
         const now = new Date();
         const currentHour = now.getHours();
-        const risk = getInversionRisk(c, currentHour, true);
+        const risk = getInversionRisk(c, currentHour, distanceMeters);
 
         const tempF = cToF(c.temperature_2m);
         const dewF = cToF(c.dew_point_2m);
         const windMph = kmhToMph(c.wind_speed_10m);
 
-        let riskHTML = '';
-        if (risk.level === "high") {
-          riskHTML = `<div class="risk-high text-white text-center py-5 mt-5 rounded-2xl font-bold text-xl shadow-lg">
-            ✅ ${risk.message}<br>
-            <span class="text-lg">(${risk.type})</span><br>
-            <span class="text-2xl mt-2 block">+${risk.boost} dB boost</span>
-          </div>`;
-        } else {
-          riskHTML = `<div class="bg-emerald-900 text-emerald-300 text-center py-5 mt-5 rounded-2xl">
-            → Low inversion risk (+${risk.boost} dB)
-          </div>`;
-        }
+        let riskHTML = risk.level === "high" 
+          ? `<div class="risk-high text-white text-center py-6 mt-5 rounded-2xl font-bold text-2xl shadow-lg">
+               ✅ ${risk.message}<br>
+               <span class="text-lg">(${risk.type})</span><br>
+               <span class="text-4xl mt-4 block">Inversion Boost: <strong>+${risk.boost} dB</strong></span>
+               <span class="text-sm opacity-75">at ${distanceMiles} miles</span>
+             </div>`
+          : `<div class="bg-emerald-900 text-emerald-300 text-center py-6 mt-5 rounded-2xl text-xl">
+               Low inversion risk (Boost: +${risk.boost} dB)
+             </div>`;
 
         document.getElementById('current').innerHTML = `
           <div class="bg-zinc-800 rounded-2xl p-6">
-            <div class="text-sm text-zinc-400 mb-2">CURRENT CONDITIONS</div>
-            <div class="text-6xl font-bold mb-1">${tempF}°F</div>
-            <div class="grid grid-cols-2 gap-4 text-sm">
+            <div class="text-sm text-zinc-400 mb-3">CURRENT CONDITIONS</div>
+            <div class="text-6xl font-bold">${tempF}°F</div>
+            <div class="grid grid-cols-2 gap-4 text-sm my-4">
               <div>Dew Point: ${dewF}°F</div>
               <div>RH: ${c.relative_humidity_2m}%</div>
               <div>Wind: ${windMph} mph</div>
               <div>Clouds: ${c.cloud_cover}%</div>
             </div>
+            <div class="text-sm text-zinc-400">Your Measured LAeq: <strong>${measured} dB</strong></div>
             ${riskHTML}
           </div>`;
 
-        // Forecast
-        let html = `<div class="text-sm text-zinc-400 mb-3">NEXT 36 HOURS — HIGH RISK PERIODS</div>`;
-        let found = 0;
+        // Next inversion within 24h
+        let html = `<div class="text-sm text-zinc-400 mb-3">NEXT INVERSION (WITHIN 24 HOURS)</div>`;
+        let found = false;
         const h = data.hourly;
 
         for (let i = 0; i < h.time.length; i++) {
           const dt = new Date(h.time[i]);
-          const hour = dt.getHours();
-          if (dt < now) continue;
+          if (dt < now || (dt - now) > 86400000) continue;
 
-          const fcData = {
+          const fcRisk = getInversionRisk({
             temperature_2m: h.temperature_2m[i],
             dew_point_2m: h.dew_point_2m[i],
             relative_humidity_2m: h.relative_humidity_2m[i],
             cloud_cover: h.cloud_cover[i],
             wind_speed_10m: h.wind_speed_10m[i]
-          };
-
-          const fcRisk = getInversionRisk(fcData, hour);
+          }, dt.getHours(), distanceMeters);
 
           if (fcRisk.level === "high") {
-            found++;
-            const timeStr = dt.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-            const isMorning = hour <= 10;
-            
-            html += `<div class="bg-zinc-800 rounded-xl p-4 flex justify-between items-center ${isMorning ? 'fog-type' : ''}">
-              <div>
-                <span class="font-medium">${timeStr}</span><br>
-                <span class="text-xs text-zinc-500">${fcRisk.type}</span>
-              </div>
+            found = true;
+            html += `<div class="bg-zinc-800 rounded-xl p-4 flex justify-between items-center">
+              <div><span class="font-medium">${dt.toLocaleString('en-US', {weekday:'short', hour:'numeric', minute:'2-digit'})}</span><br>
+                   <span class="text-xs text-zinc-500">${fcRisk.type}</span></div>
               <div class="text-right">
                 <span class="text-amber-400">${cToF(h.temperature_2m[i])}°F</span><br>
-                <span class="text-xs">${kmhToMph(h.wind_speed_10m[i])} mph</span><br>
-                <span class="text-emerald-400 text-sm">+${fcRisk.boost} dB</span>
+                <span class="text-emerald-400 font-medium">+${fcRisk.boost} dB</span>
               </div>
             </div>`;
+            break;
           }
         }
 
-        if (found === 0) {
-          html += `<div class="text-zinc-400 italic text-center py-12">No strong inversion periods in the next 36 hours</div>`;
-        }
+        if (!found) html += `<div class="text-zinc-400 italic text-center py-12">No inversion expected in next 24 hours</div>`;
 
         document.getElementById('forecast').innerHTML = html;
         document.getElementById('status').innerHTML = '';
       } catch (e) {
         console.error(e);
-        document.getElementById('status').innerHTML = '❌ Failed to load weather data';
+        document.getElementById('status').innerHTML = '❌ Error loading weather data';
       }
     }
 
-    function useSelectedLocation() {
-      checkWeather(selectedLat, selectedLon);
-    }
+    function useSelectedLocation() { checkWeather(selectedLat, selectedLon); }
 
     async function checkLocation() {
       const input = document.getElementById('locationInput').value.trim();
       const [lat, lon] = await getCoords(input);
-      selectedLat = lat;
-      selectedLon = lon;
+      selectedLat = lat; selectedLon = lon;
       checkWeather(lat, lon);
     }
 
-    // Auto-refresh every 5 minutes
-    setInterval(() => checkWeather(40.6, -82.5), 300000);
-
-    window.onload = function() {
+    window.onload = () => {
       initMap();
       checkWeather(40.6, -82.5);
     };
