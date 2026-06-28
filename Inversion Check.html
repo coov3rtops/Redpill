@@ -50,7 +50,7 @@
 
       <button onclick="recalculateAll()" 
               class="w-full bg-emerald-600 hover:bg-emerald-700 py-4 rounded-2xl font-semibold text-lg mb-6">
-        Recalculate Boost
+        Recalculate
       </button>
 
       <div id="status" class="text-center text-sm text-amber-400 mb-4 min-h-[1.5rem]"></div>
@@ -139,18 +139,18 @@
       let boost = 0;
       if (cloud < 35 && wind < 10 && dep > 8 && rh < 65) {
         boost = Math.min(20, 4 + (distanceMeters / 500) * 6);
-        return { level: "high", type: "Classic Radiation", message: "STRONG CLEAR-SKY INVERSION", boost: parseFloat(boost.toFixed(1)) };
-      }
-
-      let windLimit = isMorning ? 13 : 10;
-      if (wind < windLimit && isFogLikely) {
+      } else if (wind < (isMorning ? 13 : 10) && ((rh >= 85 && dep <= 3.5) || cloud >= 80)) {
         boost = Math.min(15, 3 + (distanceMeters / 500) * 5);
-        const type = isMorning ? "Moist/Fog (Morning)" : "Moist/Fog";
-        return { level: "high", type: type, message: "MOIST/FOG INVERSION", boost: parseFloat(boost.toFixed(1)) };
+      } else {
+        boost = wind > 5 ? 0 : 2;
       }
 
-      boost = wind > 5 ? 0 : 2;
-      return { level: "low", type: "None", message: "Low inversion risk", boost: parseFloat(boost.toFixed(1)) };
+      return { 
+        level: boost > 5 ? "high" : "low", 
+        type: boost > 8 ? "Classic Radiation" : (boost > 4 ? "Moist/Fog" : "None"), 
+        message: boost > 8 ? "STRONG CLEAR-SKY INVERSION" : (boost > 4 ? "MOIST/FOG INVERSION" : "Low inversion risk"), 
+        boost: parseFloat(boost.toFixed(1)) 
+      };
     }
 
     function recalculateAll() {
@@ -178,15 +178,19 @@
         const dewF = cToF(c.dew_point_2m);
         const windMph = kmhToMph(c.wind_speed_10m);
 
+        const fairLAeq = (measured - risk.boost).toFixed(1);
+
         let riskHTML = risk.level === "high" 
           ? `<div class="risk-high text-white text-center py-6 mt-5 rounded-2xl font-bold text-2xl shadow-lg">
                ✅ ${risk.message}<br>
                <span class="text-lg">(${risk.type})</span><br>
                <span class="text-4xl mt-4 block">Inversion Boost: <strong>+${risk.boost} dB</strong></span>
+               <span class="text-xl mt-3 block">Fair Conditions Estimate: <strong>${fairLAeq} dB</strong></span>
                <span class="text-sm opacity-75">at ${distanceMiles} miles</span>
              </div>`
           : `<div class="bg-emerald-900 text-emerald-300 text-center py-6 mt-5 rounded-2xl text-xl">
-               Low inversion risk (Boost: +${risk.boost} dB)
+               Low inversion risk (Boost: +${risk.boost} dB)<br>
+               Fair Conditions Estimate: ${fairLAeq} dB
              </div>`;
 
         document.getElementById('current').innerHTML = `
