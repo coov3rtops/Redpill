@@ -55,7 +55,6 @@
         <label class="block text-sm text-zinc-400 mb-2 font-medium">Dominant Frequency (Hz)</label>
         <input id="freqInput" type="number" value="60" step="1" min="20" max="500"
                class="w-full bg-zinc-900 text-white px-4 py-3 rounded-xl text-xl font-medium">
-        <p class="text-xs text-zinc-500 mt-1">Lower frequencies receive stronger boosts</p>
       </div>
 
       <button onclick="recalculateAll()" 
@@ -79,7 +78,7 @@
 
       <!-- Distance Reference Table -->
       <div class="mt-10 bg-zinc-800 rounded-2xl p-6">
-        <h3 class="text-lg font-semibold mb-4 text-amber-400">Distance vs Expected Inversion Boost (Low Freq 20-100 Hz)</h3>
+        <h3 class="text-lg font-semibold mb-4 text-amber-400">Distance vs Expected Inversion Boost (Low Freq)</h3>
         <table class="w-full border-collapse border border-zinc-700 text-sm" id="distanceTable">
           <thead>
             <tr class="bg-zinc-900">
@@ -98,7 +97,6 @@
             <tr><td>50+</td><td>+25 dB+</td><td>Very Low – Hard to attribute</td></tr>
           </tbody>
         </table>
-        <p class="text-xs text-zinc-500 mt-4">Lower frequencies (20-100 Hz) get the strongest boost. Attribution becomes unreliable beyond ~25 miles.</p>
       </div>
     </div>
   </div>
@@ -122,12 +120,17 @@
       map.on('click', function(e) {
         selectedLat = e.latlng.lat;
         selectedLon = e.latlng.lng;
-        if (marker) marker.remove();
-        marker = L.marker([selectedLat, selectedLon]).addTo(map)
-          .bindPopup(`Selected: ${selectedLat.toFixed(4)}, ${selectedLon.toFixed(4)}`).openPopup();
+        updateMarker();
       });
 
       marker = L.marker([40.6, -82.5]).addTo(map);
+    }
+
+    function updateMarker() {
+      if (marker) marker.remove();
+      marker = L.marker([selectedLat, selectedLon]).addTo(map)
+        .bindPopup(`Selected: ${selectedLat.toFixed(4)}, ${selectedLon.toFixed(4)}`).openPopup();
+      map.flyTo([selectedLat, selectedLon], 10); // smooth zoom
     }
 
     function getDistanceInMeters() {
@@ -153,11 +156,10 @@
     function highlightDistanceRow() {
       const miles = parseFloat(document.getElementById('distanceInput').value) || 1;
       const rows = document.querySelectorAll('#distanceTable tbody tr');
-      
       rows.forEach(row => {
         row.classList.remove('highlight-row');
         const rowMiles = parseFloat(row.cells[0].textContent);
-        if (Math.abs(rowMiles - miles) < 2 || (miles >= 25 && rowMiles === 25)) {
+        if (Math.abs(rowMiles - miles) < 3 || (miles >= 25 && rowMiles >= 25)) {
           row.classList.add('highlight-row');
         }
       });
@@ -298,7 +300,6 @@
         document.getElementById('forecast').innerHTML = html;
         document.getElementById('status').innerHTML = '';
 
-        // Highlight table row
         highlightDistanceRow();
       } catch (e) {
         console.error(e);
@@ -306,26 +307,20 @@
       }
     }
 
-    function highlightDistanceRow() {
-      const miles = parseFloat(document.getElementById('distanceInput').value) || 1;
-      const rows = document.querySelectorAll('#distanceTable tbody tr');
-      
-      rows.forEach(row => {
-        row.classList.remove('highlight-row');
-        const rowMiles = parseFloat(row.cells[0].textContent);
-        if (Math.abs(rowMiles - miles) < 3 || (miles >= 25 && rowMiles >= 25)) {
-          row.classList.add('highlight-row');
-        }
-      });
+    function useSelectedLocation() {
+      checkWeather(selectedLat, selectedLon);
     }
-
-    function useSelectedLocation() { checkWeather(selectedLat, selectedLon); }
 
     async function checkLocation() {
       const input = document.getElementById('locationInput').value.trim();
+      if (!input) return;
+      
       const [lat, lon] = await getCoords(input);
-      selectedLat = lat; selectedLon = lon;
-      checkWeather(lat, lon);
+      selectedLat = lat;
+      selectedLon = lon;
+      
+      updateMarker();           // ← Fixed: Update map
+      checkWeather(lat, lon);   // Run calculation
     }
 
     window.onload = () => {
